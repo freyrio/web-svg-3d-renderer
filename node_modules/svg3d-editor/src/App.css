@@ -1,0 +1,785 @@
+/* Reset default margins and paddings */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+/* Base App Layout */
+.app {
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #232323; /* Blender-like background color */
+}
+
+/* View Controller */
+.view-controller {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: #232323; 
+}
+
+.viewport-controls {
+  display: flex;
+  justify-content: space-between;
+  background-color: #353535;
+  border-bottom: 1px solid #181818;
+  padding: 4px 8px;
+  z-index: 10;
+}
+
+.layout-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.layout-button, .viewport-add-button, .viewport-remove-button {
+  padding: 4px 8px;
+  background-color: #454545;
+  color: #e0e0e0;
+  border: 1px solid #181818;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.2s;
+}
+
+.layout-button:hover:not(:disabled), 
+.viewport-add-button:hover:not(:disabled), 
+.viewport-remove-button:hover:not(:disabled) {
+  background-color: #505050;
+}
+
+.layout-button.active {
+  background-color: #5294e2;
+  color: #fff;
+}
+
+.layout-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.viewport-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.viewports-container {
+  flex: 1;
+  display: grid;
+  gap: 1px;
+  background-color: #181818;
+  overflow: hidden;
+}
+
+/* Viewport layouts */
+.viewport-layout-single {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+.viewport-layout-horizontal {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr;
+}
+
+.viewport-layout-vertical {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.viewport-layout-triple {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.viewport-layout-quad {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.viewport-wrapper {
+  position: relative;
+  overflow: hidden;
+  background-color: #232323;
+}
+
+/* Individual viewport styles */
+.viewport {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.viewport.active {
+  border-color: #5294e2;
+}
+
+.viewport-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 8px;
+  background-color: #353535;
+  border-bottom: 1px solid #181818;
+  font-size: 11px;
+  height: 24px;
+}
+
+.viewport-topbar-left, .viewport-topbar-center, .viewport-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.viewport-type-selector select {
+  background-color: #454545;
+  color: #e0e0e0;
+  border: 1px solid #181818;
+  border-radius: 2px;
+  font-size: 10px;
+  padding: 1px 4px;
+}
+
+.viewport-name {
+  font-weight: bold;
+  font-size: 10px;
+}
+
+.viewport-shading-buttons, .viewport-overlay-options {
+  display: flex;
+  gap: 2px;
+}
+
+.topbar-button {
+  background-color: #454545;
+  color: #e0e0e0;
+  border: 1px solid #181818;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 1px 5px;
+  transition: background-color 0.2s;
+}
+
+.topbar-button:hover {
+  background-color: #505050;
+}
+
+.topbar-button.active {
+  background-color: #5294e2;
+  color: #fff;
+}
+
+.viewport-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.viewport-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ff5555;
+  height: 100%;
+  font-size: 14px;
+  background-color: #333;
+}
+
+/* Viewport styles */
+#viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background-color: #232323; /* Match Blender's 3D viewport color */
+}
+
+svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Polygon styles */
+polygon {
+  transition: opacity 0.1s ease;
+}
+
+polygon.selected, polygon[data-model-id].selected {
+  stroke: #F9AD2C !important; /* Blender's selection orange */
+  stroke-width: 2px !important;
+}
+
+/* Viewport overlays */
+.fps-counter, .stats-display, .camera-info, .loading, .selection-indicator, .navigation-help {
+  position: absolute;
+  background-color: rgba(40, 40, 40, 0.8); /* Darker overlay background */
+  color: #fff;
+  padding: 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.fps-counter {
+  top: 10px;
+  right: 10px;
+}
+
+.stats-display {
+  top: 40px;
+  right: 10px;
+}
+
+.camera-info {
+  bottom: 10px;
+  right: 10px;
+}
+
+.navigation-help {
+  top: 10px;
+  left: 10px;
+  line-height: 1.5;
+}
+
+.navigation-help strong {
+  color: #5294e2; /* Highlight shortcut keys */
+}
+
+.loading {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 14px;
+  padding: 16px 24px;
+  background-color: rgba(40, 40, 40, 0.9);
+}
+
+.selection-indicator {
+  bottom: 10px;
+  left: 10px;
+  background-color: rgba(249, 173, 44, 0.9); /* Blender's selection orange */
+  color: #000;
+}
+
+/* Gizmo toggle buttons */
+.gizmo-toggles {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  background-color: rgba(40, 40, 40, 0.8);
+  padding: 5px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.gizmo-toggle {
+  padding: 4px 10px;
+  background-color: #454545;
+  color: #e0e0e0;
+  border: 1px solid #181818;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: background-color 0.2s;
+  width: auto;
+  margin: 0;
+}
+
+.gizmo-toggle:hover {
+  background-color: #505050;
+}
+
+.gizmo-toggle.active {
+  background-color: #5294e2;
+  color: #fff;
+  border-color: #3a7bcc;
+}
+
+/* Controls panel - Blender inspired */
+.controls-panel {
+  width: 320px;
+  background-color: #2B2B2B; /* Blender panel color */
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  color: #e0e0e0;
+  font-size: 11px;
+  height: 100%;
+  border-left: 1px solid #181818;
+  user-select: none;
+}
+
+/* Panel structure */
+.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  border-bottom: 1px solid #181818;
+  transition: flex-grow 0.3s ease;
+}
+
+.panel:last-child {
+  border-bottom: none;
+  flex: 2;
+}
+
+.panel-header {
+  padding: 6px 8px;
+  background-color: #353535; /* Blender header color */
+  border-bottom: 1px solid #181818;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 24px;
+}
+
+.panel-header h3 {
+  font-size: 11px;
+  font-weight: 600;
+  color: #e0e0e0;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+  background-color: #2B2B2B; /* Blender panel color */
+}
+
+.panel-footer {
+  padding: 3px 6px;
+  display: flex;
+  justify-content: space-between;
+  background-color: #353535; /* Blender header color */
+  border-top: 1px solid #181818;
+}
+
+/* Tab bar in properties panel */
+.tab-bar {
+  display: flex;
+  width: 100%;
+}
+
+.tab {
+  flex: 1;
+  border: none;
+  padding: 4px;
+  background-color: #353535; /* Blender tab color */
+  color: #a0a0a0;
+  cursor: pointer;
+  text-align: center;
+  transition: background-color 0.2s, color 0.2s;
+  border-right: 1px solid #181818;
+  border-bottom: 1px solid #181818;
+}
+
+.tab:last-child {
+  border-right: none;
+}
+
+.tab:hover {
+  background-color: #454545;
+}
+
+.tab.active {
+  background-color: #2B2B2B; /* Active tab matches panel */
+  color: #fff;
+  border-bottom: 1px solid #5294e2;
+}
+
+.tab:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.tab-icon {
+  font-size: 14px;
+}
+
+/* Property panel styling */
+.property-section {
+  padding: 6px;
+}
+
+.property-group {
+  margin-bottom: 12px;
+  background-color: #323232;
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.property-group h4 {
+  background-color: #3C3C3C;
+  padding: 4px 8px;
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.property-row {
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+}
+
+.property-row:not(:last-child) {
+  border-bottom: 1px solid #232323;
+}
+
+.property-label {
+  flex: 1;
+  font-size: 10px;
+}
+
+.property-value {
+  flex: 0 0 40px;
+  text-align: right;
+  color: #80ccff;
+  font-size: 10px;
+  font-family: monospace;
+}
+
+.property-row.number-input input[type="range"] {
+  flex: 2;
+  margin: 0 8px;
+  height: 4px;
+  background-color: #454545;
+  border-radius: 2px;
+  appearance: none;
+  outline: none;
+}
+
+.property-row.number-input input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 8px;
+  height: 8px;
+  background-color: #5294e2;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.property-button {
+  flex: 1;
+  padding: 2px 4px;
+  background-color: #454545;
+  color: #e0e0e0;
+  border: 1px solid #181818;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 10px;
+  transition: background-color 0.2s;
+}
+
+.property-button:hover {
+  background-color: #505050;
+}
+
+.property-button.active {
+  background-color: #5294e2;
+  color: #fff;
+}
+
+.property-button.danger {
+  background-color: #533;
+}
+
+.property-button.danger:hover {
+  background-color: #744;
+}
+
+.property-select {
+  flex: 1;
+  padding: 2px 4px;
+  background-color: #454545;
+  color: #e0e0e0;
+  border: 1px solid #181818;
+  border-radius: 2px;
+  font-size: 10px;
+}
+
+.property-row.checkbox {
+  gap: 8px;
+}
+
+.property-row.checkbox input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  appearance: none;
+  background-color: #454545;
+  border: 1px solid #181818;
+  border-radius: 2px;
+  cursor: pointer;
+  position: relative;
+}
+
+.property-row.checkbox input[type="checkbox"]:checked {
+  background-color: #5294e2;
+}
+
+.property-row.checkbox input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  color: white;
+  font-size: 10px;
+  top: 0;
+  left: 2px;
+}
+
+.property-row.checkbox label {
+  flex: 1;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+input[type="color"] {
+  flex: 1;
+  height: 18px;
+  background: none;
+  border: 1px solid #181818;
+  border-radius: 2px;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* Outliner styling */
+.scene-tree {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.scene-root {
+  padding-left: 0;
+}
+
+.scene-tree ul {
+  list-style: none;
+  padding-left: 16px;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background-color 0.1s;
+  height: 22px;
+}
+
+.tree-row:hover {
+  background-color: #3c3c3c;
+}
+
+.tree-item.selected .tree-row {
+  background-color: #5294e2;
+}
+
+.tree-toggle {
+  width: 16px;
+  font-size: 9px;
+  color: #888;
+}
+
+.tree-icon {
+  width: 20px;
+  text-align: center;
+}
+
+.tree-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+}
+
+.empty-message {
+  padding: 8px;
+  text-align: center;
+  color: #888;
+  font-style: italic;
+  font-size: 10px;
+}
+
+/* Add model dropdown */
+.panel-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.small-button {
+  padding: 1px 5px;
+  background-color: #454545;
+  color: #e0e0e0;
+  border: 1px solid #181818;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 10px;
+  transition: background-color 0.2s;
+}
+
+.small-button:hover {
+  background-color: #505050;
+}
+
+.dropdown-menu {
+  position: absolute;
+  right: 8px;
+  top: 36px;
+  background-color: #353535;
+  border: 1px solid #181818;
+  border-radius: 2px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  display: none;
+  font-size: 10px;
+  min-width: 120px;
+}
+
+.dropdown-menu div {
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.1s;
+}
+
+.dropdown-menu div:hover {
+  background-color: #454545;
+}
+
+.animation-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.animation-button {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #454545;
+  color: #e0e0e0;
+  border: 1px solid #181818;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.animation-button:hover {
+  background-color: #505050;
+}
+
+.animation-button.active {
+  background-color: #5294e2;
+  color: #fff;
+}
+
+/* Make scrollbars more Blender-like */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #2B2B2B;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #454545;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #505050;
+}
+
+::-webkit-scrollbar-corner {
+  background: #2B2B2B;
+}

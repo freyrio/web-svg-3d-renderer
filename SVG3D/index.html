@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SVG3D Renderer - Prototype Version</title>
+    <style>
+    /* Using prototype styles */
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background-color: #111; /* Background for whole page */
+    }
+    #container {
+        position: relative;
+      width: 100vw;
+      height: 100vh;
+      /* background-color: #111; Removed, set on body */
+      }
+      svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      background-color: rgba(0,0,0,0.5);
+      padding: 8px;
+        border-radius: 4px;
+      font-size: 14px;
+      z-index: 10; /* Ensure info is on top */
+      }
+    </style>
+  </head>
+  <body>
+  <div id="container"></div>
+  <div id="info">3D SVG Renderer - Loading...</div>
+    
+    <script type="module">
+    // Imports from the library structure, using prototype class names
+    import { Vector3 } from './src/math/Vector3.js';
+    import { Matrix4 } from './src/math/Matrix4.js';
+    import { Object3D } from './src/core/Object3D.js';
+    import { Scene } from './src/core/Scene.js';
+    import { Camera } from './src/cameras/Camera.js';
+    import { PerspectiveCamera } from './src/cameras/PerspectiveCamera.js';
+    import { Material } from './src/materials/Material.js';
+    import { Face } from './src/geometries/Geometry.js';
+    import { Mesh } from './src/objects/Mesh.js';
+    import { OrbitController } from './src/controls/OrbitControls.js';
+    import { Renderer } from './src/core/Renderer.js';
+    import { Raycaster } from './src/core/Raycaster.js';
+    import { CameraManager } from './src/cameras/CameraManager.js';
+
+    // ---- Animation Loop (from Prototype) ----
+    class Animation {
+      constructor(renderer, scene, cameraManager, controllers = []) {
+        this.renderer = renderer;
+        this.scene = scene;
+        this.cameraManager = cameraManager;
+        this.controllers = controllers;
+        this.running = false;
+        this.lastTime = 0;
+        
+        // Bind the animate method to this instance
+        this.animate = this.animate.bind(this);
+      }
+      
+      start() {
+        if (this.running) return;
+        this.running = true;
+        this.lastTime = performance.now();
+        requestAnimationFrame(this.animate);
+        return this;
+      }
+      
+      stop() {
+        this.running = false;
+        return this;
+      }
+      
+      animate(time) {
+        if (!this.running) return;
+        
+        // Ensure world matrices are up-to-date before updates and rendering
+        this.scene.updateWorldMatrix(true);
+        
+        const now = performance.now();
+        const deltaTime = Math.min((now - this.lastTime) / 1000, 0.1); // Seconds, capped
+        this.lastTime = now;
+        
+        // Update controllers
+        this.controllers.forEach(controller => {
+          if (controller && typeof controller.update === 'function') {
+            controller.update(deltaTime);
+          } else {
+            // console.warn("Controller missing update method:", controller);
+          }
+        });
+
+        // Note: Prototype render implicitly calls matrix updates
+        // Our adapted Renderer processObject might rely on scene.updateWorldMatrix
+        // Let's ensure scene updates are called before render
+        // this.scene.updateWorldMatrix(true); // Already called inside renderer.render
+        
+        const activeCamera = this.cameraManager.getActiveCamera();
+        if (activeCamera) {
+            this.renderer.render(this.scene, activeCamera);
+        } else {
+            console.warn("Animation: No active camera found in CameraManager.");
+        }
+        
+        requestAnimationFrame(this.animate);
+      }
+    }
+
+    // ---- Main Application (from Prototype) ----
+    class App {
+      constructor(container) {
+        if (!container) {
+            console.error("App: Container element not found.");
+            return;
+        }
+        this.container = container;
+        this.width = container.clientWidth;
+        this.height = container.clientHeight;
+        
+        this.scene = new Scene();
+        this.renderer = new Renderer({ 
+            container: container,
+            width: this.width,
+            height: this.height
+        });
+
+        this.cameraManager = new CameraManager();
+        const initialCam = this.cameraManager.getActiveCamera();
+
+        // *** Set initial viewport and projection for the camera ***
+        initialCam.setViewport(0, this.width, 0, this.height); // Match renderer size
+        if (initialCam.type === 'PerspectiveCamera') {
+            initialCam.aspect = this.width / this.height;
+            initialCam.updateProjectionMatrix();
+        } else if (initialCam.type === 'OrthographicCamera') {
+            // Ensure initial ortho frustum matches aspect ratio
+            const aspect = this.width / this.height;
+            const camHeight = initialCam.top - initialCam.bottom; // Use default top/bottom
+            const camWidth = camHeight * aspect;
+            initialCam.left = -camWidth / 2;
+            initialCam.right = camWidth / 2;
+            initialCam.updateProjectionMatrix();
+        }
+        // *** End of added camera setup ***
+
+        this.raycaster = new Raycaster(); 
+        this.pointer = { x: 0, y: 0 }; // Renamed from mouse for clarity
+        
+        // State for hover effect
+        this.hoveredObject = null;
+        this.hoveredFaceIndex = -1;
+        this.originalMaterial = null; // Store the original Material instance
+        this.highlightMaterial = new Material('#FFFF00'); // Yellow highlight
+        
+        this.initialize();
+      }
+      
+      initialize() {
+        this.mesh = new Mesh(2, 2, 2); 
+        this.scene.add(this.mesh);
+        
+        const target = new Vector3(0, 0, 0);
+        const initialCamera = this.cameraManager.getActiveCamera();
+        this.orbitController = new OrbitController(initialCamera, target);
+        this.orbitController.distance = 8; 
+        console.log(`[App Initialize] OrbitController distance after setting in App: ${this.orbitController.distance}`);
+        this.orbitController.autoRotateSpeed = 1.5; 
+        this.orbitController.enableMouseControls(this.container);
+        
+        // Change listener to pointermove for hover effect
+        this.container.addEventListener('pointermove', this.onPointerMove.bind(this));
+        // Add pointerleave listener to clear hover state when pointer leaves container
+        this.container.addEventListener('pointerleave', this.onPointerLeave.bind(this));
+
+        this.animation = new Animation(
+          this.renderer, 
+          this.scene, 
+          this.cameraManager,
+          [this.orbitController]
+        );
+        
+        window.addEventListener('resize', this.onResize.bind(this));
+        window.addEventListener('keydown', this.onKeyDown.bind(this));
+        this.animation.start();
+
+        console.log("SVG3D Prototype App Initialized (Hover Interaction, Camera Switch: 0)");
+        document.getElementById('info').textContent = '3D SVG Renderer - Hover cube faces! Press 0 to switch camera.'; 
+      }
+
+      // Changed from onMouseClick to onPointerMove
+      onPointerMove(event) {
+        // Calculate pointer position in normalized device coordinates (-1 to +1)
+        const rect = this.container.getBoundingClientRect();
+        this.pointer.x = ((event.clientX - rect.left) / this.width) * 2 - 1;
+        this.pointer.y = -((event.clientY - rect.top) / this.height) * 2 + 1;
+
+        // Update the picking ray
+        this.raycaster.setFromCamera(this.pointer, this.cameraManager.getActiveCamera());
+
+        // Find intersections
+        const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+
+        let newHoverObject = null;
+        let newHoverFaceIndex = -1;
+
+        if (intersects.length > 0) {
+            const intersection = intersects[0]; // Closest intersection
+            newHoverObject = intersection.object;
+            newHoverFaceIndex = intersection.faceIndex;
+        }
+
+        // Check if hover state changed
+        if (newHoverObject !== this.hoveredObject || newHoverFaceIndex !== this.hoveredFaceIndex) {
+            
+            // --- Revert previous hover --- 
+            if (this.hoveredObject && this.hoveredFaceIndex !== -1 && this.originalMaterial) {
+                 // Ensure the face index is valid and the object has faces/materials
+                if (this.hoveredObject.faces && this.hoveredFaceIndex < this.hoveredObject.faces.length) {
+                    const previousFace = this.hoveredObject.faces[this.hoveredFaceIndex];
+                    if (previousFace) {
+                        previousFace.material = this.originalMaterial; // Restore original
+                    }
+                }
+                this.originalMaterial = null; // Clear stored material
+            }
+
+            // --- Apply new hover --- 
+            this.hoveredObject = newHoverObject;
+            this.hoveredFaceIndex = newHoverFaceIndex;
+
+            if (this.hoveredObject && this.hoveredFaceIndex !== -1) {
+                 // Ensure the face index is valid and the object has faces/materials
+                if (this.hoveredObject.faces && this.hoveredFaceIndex < this.hoveredObject.faces.length) {
+                    const currentFace = this.hoveredObject.faces[this.hoveredFaceIndex];
+                    if (currentFace) {
+                        this.originalMaterial = currentFace.material; // Store original
+                        currentFace.material = this.highlightMaterial; // Apply highlight
+                    }
+                }
+            }
+        }
+      }
+
+      // Handle pointer leaving the container
+      onPointerLeave(event) {
+          // Revert any existing hover effect
+          if (this.hoveredObject && this.hoveredFaceIndex !== -1 && this.originalMaterial) {
+                if (this.hoveredObject.faces && this.hoveredFaceIndex < this.hoveredObject.faces.length) {
+                    const previousFace = this.hoveredObject.faces[this.hoveredFaceIndex];
+                    if (previousFace) {
+                        previousFace.material = this.originalMaterial;
+                    }
+                }
+            }
+          // Reset hover state
+          this.hoveredObject = null;
+          this.hoveredFaceIndex = -1;
+          this.originalMaterial = null;
+      }
+      
+      onResize() {
+        this.width = this.container.clientWidth;
+        this.height = this.container.clientHeight;
+        this.renderer.setSize(this.width, this.height);
+
+        const activeCamera = this.cameraManager.getActiveCamera();
+        if (activeCamera) {
+            if (activeCamera.type === 'PerspectiveCamera') {
+                activeCamera.aspect = this.width / this.height;
+            } else if (activeCamera.type === 'OrthographicCamera') {
+                // Orthographic camera might need size adjustment based on aspect ratio
+                // For now, just call setSize - might need refinement depending on desired behavior
+                const aspect = this.width / this.height;
+                // Decide whether to maintain vertical or horizontal FOV
+                // Option 1: Maintain vertical size (adjust width)
+                const camHeight = activeCamera.zoom * (activeCamera.top - activeCamera.bottom); // Use original size scaled by zoom
+                const camWidth = camHeight * aspect;
+                activeCamera.left = -camWidth / 2;
+                activeCamera.right = camWidth / 2;
+                activeCamera.top = camHeight / 2; // Keep vertical size consistent
+                activeCamera.bottom = -camHeight / 2;
+                // Or, more simply, use its own setSize method if available
+                // activeCamera.setSize(this.width, this.height); // Removed assumption
+            }
+            activeCamera.updateProjectionMatrix();
+            // Update orbit controller if it targets the active camera
+            if (this.orbitController && this.orbitController.camera === activeCamera) {
+                this.orbitController.update(); // Or specific update method if needed for resize
+            }
+        }
+      }
+
+      // Handle keydown events
+      onKeyDown(event) {
+          if (event.key === '0') {
+              const oldCamera = this.cameraManager.getActiveCamera();
+              const newCamera = this.cameraManager.toggleCameraType();
+              if (newCamera && this.orbitController) {
+                  // Update orbit controller to use the new camera
+                  this.orbitController.camera = newCamera; // Directly assign the new camera
+                  // Optional: Reset orbit controller state if needed
+                  // this.orbitController.reset(); 
+              }
+              console.log(`Switched camera to ${newCamera ? newCamera.type : 'None'}`);
+          }
+      }
+    }
+
+    // Initialize the application
+    // Use a flag to prevent double initialization
+    if (!window.svgAppInitialized) {
+        const initializeApp = () => {
+            const container = document.getElementById('container');
+            if (container && !window.svgAppInitialized) {
+                window.svgApp = new App(container);
+                window.svgAppInitialized = true;
+            }
+        };
+
+        if (document.readyState === 'complete' || (document.readyState !== 'loading' && !document.documentElement.doScroll)) {
+            initializeApp();
+        } else {
+            document.addEventListener('DOMContentLoaded', initializeApp);
+        }
+    }
+    </script>
+  </body>
+</html>

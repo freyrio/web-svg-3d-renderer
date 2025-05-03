@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D SVG Renderer</title>
+  <link rel="stylesheet" href="index.css"/>
+</head>
+<body>
+  <div id="container"></div>
+  <div id="info" class="info-label">3D SVG Renderer - Perspective Camera - Mouse: Drag to rotate, Wheel to zoom, Space to toggle auto-rotation, 0 to switch camera</div>
+  <div id="stats" class="info-label">FPS: 0 | Meshes: 0 | Faces: 0</div>
+  <div id="render-mode" class="info-label">
+    <button id="btn-normal" class="mode-button active">Normal</button>
+    <button id="btn-depth" class="mode-button">Depth</button>
+    <button id="btn-color-depth" class="mode-button">Color Depth</button>
+    <button id="btn-wireframe" class="mode-button">Wireframe</button>
+    <button id="btn-solid" class="mode-button">Solid</button>
+  </div>
+  <div id="wireframe-toggle" class="info-label">
+    <button id="btn-toggle-wireframe" class="toggle-button active">Wireframe: ON</button>
+  </div>
+  <div id="intersection-toggle" class="info-label">
+    <button id="btn-toggle-intersection" class="toggle-button active">Intersection Handling: ON</button>
+  </div>
+  <div id="intersection-lines-toggle" class="info-label">
+    <button id="btn-toggle-intersection-lines" class="toggle-button active">Intersection Lines: ON</button>
+  </div>
+  <div id="minimap-container">
+    <svg id="minimap-svg"></svg>
+  </div>
+
+  <!-- Load the renderer library first since app.js depends on it -->
+  <script src="../../svg3d.js"></script>
+  <!-- Load the application logic -->
+  <script src="app.js"></script>
+</body>
+</html>

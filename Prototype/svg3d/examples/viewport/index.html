@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG3D Viewport Example</title>
+    <style>
+        /* Reset and basic styling */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #222;
+            color: #eee;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        header {
+            background-color: #333;
+            padding: 10px 20px;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        
+        #viewport-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        footer {
+            background-color: #333;
+            padding: 5px 20px;
+            color: #aaa;
+            font-size: 12px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        SVG3D Viewport Example
+    </header>
+    
+    <div class="content">
+        <div id="viewport-container"></div>
+    </div>
+    
+    <footer>
+        SVG3D Viewport with Toolbar and Menubar | Press '0' to toggle camera mode | Mouse: Drag to orbit, Wheel to zoom
+    </footer>
+    
+    <!-- Load the renderer library -->
+    <script src="../../svg3d.js"></script>
+    <!-- Load the shapes library -->
+    <script src="../../shapes3d.js"></script>
+    <!-- Load the controls library -->
+    <script src="../../controls3d.js"></script>
+    <!-- Load the UI components -->
+    <script src="../../ui/toolbar.js"></script>
+    <script src="../../ui/menubar.js"></script>
+    <script src="../../ui/3dviewport.js"></script>
+    
+    <script>
+        // Initialize the example when the window loads
+        window.addEventListener('load', initExample);
+        
+        function initExample() {
+            // Get viewport container
+            const container = document.getElementById('viewport-container');
+            
+            // Create scene
+            const scene = new Scene();
+            scene.background = '#111';
+            
+            // Create camera manager
+            const cameraManager = new CameraManager(container);
+            const camera = cameraManager.getActiveCamera();
+            const controller = cameraManager.getActiveController();
+            
+            // Create renderer
+            const renderer = new SVGRenderer(
+                container, 
+                container.clientWidth, 
+                container.clientHeight
+            );
+            
+            // Create cubes with different positions and colors
+            createCube(scene, -3, 0, -2, '#FF6B6B');
+            createCube(scene, 0, 0, 0, '#4ECDC4');
+            createCube(scene, 3, 0, 2, '#FFD166');
+            
+            // Create a plane
+            createPlane(scene, 0, -2, 0, 10, 10, '#555555');
+            
+            // Create a sphere
+            createSphere(scene, 0, 2, 0, 1, 16, '#FF9F1C');
+            
+            // Create 3D viewport
+            const viewport = new ThreeDViewPort({
+                container: container,
+                scene: scene,
+                camera: camera,
+                renderer: renderer,
+                controller: controller,
+                renderMode: 'normal'
+            });
+            
+            // Enable mouse controls
+            controller.enableMouseControls(renderer.svg);
+            
+            // Set camera initial position
+            controller.distance = 15;
+            controller.theta = Math.PI / 4;
+            controller.phi = Math.PI / 4;
+            controller.update(0);
+            
+            // Setup window resize event
+            window.addEventListener('resize', () => {
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+                
+                viewport.setSize(width, height);
+            });
+            
+            // Trigger initial resize to set correct size
+            viewport.setSize(container.clientWidth, container.clientHeight);
+        }
+        
+        // Helper function to create a cube
+        function createCube(scene, x, y, z, color) {
+            const cube = Shapes.createCube(2, 2, 2);
+            cube.setPosition(x, y, z);
+            
+            // Apply material to all faces individually
+            cube.materials[0].setColor(color);
+            cube.materials[1].setColor(color);
+            cube.materials[2].setColor(color);
+            cube.materials[3].setColor(color);
+            cube.materials[4].setColor(color);
+            cube.materials[5].setColor(color);
+            
+            // Set opacity on all materials
+            cube.materials.forEach(material => {
+                material.setOpacity(0.9);
+            });
+            
+            // Add to scene
+            scene.add(cube);
+            
+            return cube;
+        }
+        
+        // Helper function to create a plane
+        function createPlane(scene, x, y, z, width, depth, color) {
+            // Create material first
+            const material = new Material(color, 1.0);
+            
+            // Create plane with material
+            const plane = Shapes.createPlane(width, depth, 1, 1, material);
+            plane.setPosition(x, y, z);
+            plane.setRotation(Math.PI / 2, 0, 0);
+            
+            // Add to scene
+            scene.add(plane);
+            
+            return plane;
+        }
+        
+        // Helper function to create a sphere
+        function createSphere(scene, x, y, z, radius, segments, color) {
+            // Create material first
+            const material = new Material(color, 0.9);
+            
+            // Create sphere with material
+            const sphere = Shapes.createSphere(radius, segments, material);
+            sphere.setPosition(x, y, z);
+            
+            // Add to scene
+            scene.add(sphere);
+            
+            return sphere;
+        }
+    </script>
+</body>
+</html>

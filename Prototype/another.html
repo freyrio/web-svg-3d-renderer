@@ -1,0 +1,1760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG 3D Renderer</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #f0f0f0; }
+        svg { display: block; }
+    </style>
+</head>
+<body>
+    <svg id="renderer" width="800" height="600"></svg>
+
+    <script type="module">
+// --- Utility Functions ---
+const degToRad = (degrees) => degrees * Math.PI / 180;
+const radToDeg = (radians) => radians * 180 / Math.PI;
+
+// --- Math Classes (Adapted from provided files) ---
+
+/**
+ * Class representing a 3D vector.
+ */
+class Vector3 {
+  /**
+   * Create a Vector3.
+   * @param {number} x - The x component.
+   * @param {number} y - The y component.
+   * @param {number} z - The z component.
+   */
+  constructor(x = 0, y = 0, z = 0) {
+    this.x = x;
+    this.y = y;
+    this.z = z;
+  }
+
+  /**
+   * Set the vector components.
+   * @param {number} x - The x component.
+   * @param {number} y - The y component.
+   * @param {number} z - The z component.
+   * @returns {Vector3} This vector for chaining.
+   */
+  set(x, y, z) {
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    return this;
+  }
+
+  /**
+   * Copy the components of a vector to this vector.
+   * @param {Vector3} v - The vector to copy.
+   * @returns {Vector3} This vector for chaining.
+   */
+  copy(v) {
+    this.x = v.x;
+    this.y = v.y;
+    this.z = v.z;
+    return this;
+  }
+
+  /**
+   * Clone this vector.
+   * @returns {Vector3} A new vector with the same components.
+   */
+  clone() {
+    return new Vector3(this.x, this.y, this.z);
+  }
+
+  /**
+   * Add a vector to this vector.
+   * @param {Vector3} v - The vector to add.
+   * @returns {Vector3} This vector for chaining.
+   */
+  add(v) {
+    this.x += v.x;
+    this.y += v.y;
+    this.z += v.z;
+    return this;
+  }
+
+   /**
+   * Adds a scaled vector to this vector.
+   * @param {Vector3} v The vector to add.
+   * @param {number} s The scalar to scale the vector v by.
+   * @returns {Vector3} This vector.
+   */
+  addScaledVector( v, s ) {
+		this.x += v.x * s;
+		this.y += v.y * s;
+		this.z += v.z * s;
+		return this;
+	}
+
+  /**
+   * Subtract a vector from this vector.
+   * @param {Vector3} v - The vector to subtract.
+   * @returns {Vector3} This vector for chaining.
+   */
+  sub(v) {
+    this.x -= v.x;
+    this.y -= v.y;
+    this.z -= v.z;
+    return this;
+  }
+
+  /**
+   * Subtract two vectors and store the result in this vector.
+   * @param {Vector3} a - The first vector.
+   * @param {Vector3} b - The second vector.
+   * @returns {Vector3} This vector for chaining.
+   */
+  subVectors(a, b) {
+    this.x = a.x - b.x;
+    this.y = a.y - b.y;
+    this.z = a.z - b.z;
+    return this;
+  }
+
+  /**
+   * Calculate the cross product of two vectors and store the result in this vector.
+   * @param {Vector3} a - The first vector.
+   * @param {Vector3} b - The second vector.
+   * @returns {Vector3} This vector for chaining.
+   */
+  crossVectors(a, b) {
+    const ax = a.x, ay = a.y, az = a.z;
+    const bx = b.x, by = b.y, bz = b.z;
+
+    this.x = ay * bz - az * by;
+    this.y = az * bx - ax * bz;
+    this.z = ax * by - ay * bx;
+
+    return this;
+  }
+
+  /**
+   * Multiply this vector by a scalar.
+   * @param {number} s - The scalar to multiply by.
+   * @returns {Vector3} This vector for chaining.
+   */
+  multiplyScalar(s) {
+    this.x *= s;
+    this.y *= s;
+    this.z *= s;
+    return this;
+  }
+
+  /**
+   * Divide this vector by a scalar.
+   * @param {number} s - The scalar to divide by.
+   * @returns {Vector3} This vector for chaining.
+   */
+  divideScalar(s) {
+    // Check for division by zero or very small numbers
+     if (Math.abs(s) < 1e-10) {
+        console.warn("Vector3.divideScalar: division by zero or near-zero scalar.");
+        // Optionally set to zero or keep current value, depending on desired behavior
+        // this.x = 0; this.y = 0; this.z = 0;
+        // Or return this to avoid NaN propagation
+        return this;
+    }
+    return this.multiplyScalar(1 / s);
+  }
+
+  /**
+   * Calculate the squared length of this vector.
+   * @returns {number} The squared length.
+   */
+  lengthSq() {
+    return this.x * this.x + this.y * this.y + this.z * this.z;
+  }
+
+  /**
+   * Calculate the length of this vector.
+   * @returns {number} The length.
+   */
+  length() {
+    return Math.sqrt(this.lengthSq());
+  }
+
+  /**
+   * Normalize this vector (make it unit length).
+   * @returns {Vector3} This vector for chaining.
+   */
+  normalize() {
+    const len = this.length();
+    // Handle zero length vector to avoid division by zero
+    if (len === 0) {
+        // console.warn("Vector3.normalize: cannot normalize zero vector.");
+        return this; // Or set to a default direction like (0,0,0) or (0,0,1)
+    }
+    return this.divideScalar(len);
+  }
+
+  /**
+   * Calculate the cross product with another vector.
+   * @param {Vector3} v - The other vector.
+   * @returns {Vector3} This vector for chaining.
+   */
+  cross(v) {
+    return this.crossVectors(this, v);
+  }
+
+  /**
+   * Calculate the dot product with another vector.
+   * @param {Vector3} v - The other vector.
+   * @returns {number} The dot product.
+   */
+  dot(v) {
+    return this.x * v.x + this.y * v.y + this.z * v.z;
+  }
+
+  /**
+   * Applies a Matrix4 transformation to this vector.
+   * Treats the vector as a point (w=1) and applies perspective division.
+   * @param {Matrix4} m - The Matrix4 to apply.
+   * @returns {Vector3} This vector for chaining.
+   */
+  applyMatrix4(m) {
+    const x = this.x, y = this.y, z = this.z;
+    const e = m.elements;
+
+    // Calculate homogeneous coordinates using Column-Major M * v
+    const rx = e[0] * x + e[4] * y + e[8] * z + e[12];
+    const ry = e[1] * x + e[5] * y + e[9] * z + e[13];
+    const rz = e[2] * x + e[6] * y + e[10] * z + e[14];
+    const rw = e[3] * x + e[7] * y + e[11] * z + e[15];
+
+    if (Math.abs(rw) < 1e-10) { // Check for near-zero w
+      console.warn("Vector3.applyMatrix4: w component is near zero.");
+      this.x = 0;
+      this.y = 0;
+      this.z = 0;
+    } else {
+      const invW = 1.0 / rw; // Calculate inverse W
+      this.x = rx * invW;
+      this.y = ry * invW;
+      this.z = rz * invW;
+    }
+
+    return this;
+  }
+
+  /**
+   * Sets this vector to the position elements (translation) of a transformation matrix.
+   * Assumes the matrix is stored in Column-Major format.
+   * @param {Matrix4} m - The Matrix4 to extract position from.
+   * @returns {Vector3} This vector.
+   */
+  setFromMatrixPosition(m) {
+    const e = m.elements;
+    // Column-Major: Translation is in elements 12, 13, 14 (4th column)
+    this.x = e[12];
+    this.y = e[13];
+    this.z = e[14];
+    return this;
+  }
+
+  /**
+   * Transforms the direction of this vector by a matrix (assumes matrix has no translation).
+   * Multiplies by the upper 3x3 part assuming Column-Major format.
+   * Excludes perspective division. Useful for transforming normals or directions.
+   * @param {Matrix4} m - The Matrix4 to apply.
+   * @returns {Vector3} This vector.
+   */
+  transformDirection(m) {
+    const x = this.x, y = this.y, z = this.z;
+    const e = m.elements;
+
+    // Multiply by upper 3x3 part of Column-Major matrix
+    this.x = e[0] * x + e[4] * y + e[8] * z;
+    this.y = e[1] * x + e[5] * y + e[9] * z;
+    this.z = e[2] * x + e[6] * y + e[10] * z;
+
+    return this.normalize(); // Re-normalize the direction vector
+  }
+
+  /**
+   * Applies a Matrix4 transformation to this vector, treating it as a point (w=1).
+   * Does NOT apply perspective division. Uses Column-Major format.
+   * Use for changing coordinate systems without applying perspective.
+   * @param {Matrix4} m - The Matrix4 to apply.
+   * @returns {Vector3} This vector for chaining.
+   */
+  applyMatrix4AsPoint(m) {
+    const x = this.x, y = this.y, z = this.z;
+    const e = m.elements;
+    
+    // Calculate transformed point using Column-Major M * v (w=1)
+    this.x = e[0] * x + e[4] * y + e[8] * z + e[12];
+    this.y = e[1] * x + e[5] * y + e[9] * z + e[13];
+    this.z = e[2] * x + e[6] * y + e[10] * z + e[14];
+    
+    // const w = e[3] * x + e[7] * y + e[11] * z + e[15]; // w calculation removed
+    // Normalization based on w removed as per method description
+    
+    return this;
+  }
+}
+
+
+/**
+ * Class representing a 4x4 matrix for 3D transformations.
+ * Uses Column-Major element order.
+ *   Elements:
+ *   [ m00, m10, m20, m30,  // Col 1
+ *     m01, m11, m21, m31,  // Col 2
+ *     m02, m12, m22, m32,  // Col 3
+ *     m03, m13, m23, m33 ] // Col 4 (Translation)
+ */
+class Matrix4 {
+  /**
+   * Create a Matrix4, initialized as a column-major identity matrix.
+   */
+  constructor() {
+    // Initialize Column-Major Identity
+    this.elements = [
+      1, 0, 0, 0,  // Col 1
+      0, 1, 0, 0,  // Col 2
+      0, 0, 1, 0,  // Col 3
+      0, 0, 0, 1   // Col 4
+    ];
+  }
+
+  /**
+   * Set the elements of this matrix from column-major arguments.
+   * @param {number} n11 - Element m00 (col 1, row 1)
+   * @param {number} n21 - Element m10 (col 1, row 2)
+   * @param {number} n31 - Element m20 (col 1, row 3)
+   * @param {number} n41 - Element m30 (col 1, row 4)
+   * @param {number} n12 - Element m01 (col 2, row 1)
+   * @param {number} n22 - Element m11 (col 2, row 2)
+   * @param {number} n32 - Element m21 (col 2, row 3)
+   * @param {number} n42 - Element m31 (col 2, row 4)
+   * @param {number} n13 - Element m02 (col 3, row 1)
+   * @param {number} n23 - Element m12 (col 3, row 2)
+   * @param {number} n33 - Element m22 (col 3, row 3)
+   * @param {number} n43 - Element m32 (col 3, row 4)
+   * @param {number} n14 - Element m03 (col 4, row 1, tx)
+   * @param {number} n24 - Element m13 (col 4, row 2, ty)
+   * @param {number} n34 - Element m23 (col 4, row 3, tz)
+   * @param {number} n44 - Element m33 (col 4, row 4)
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  set(n11, n21, n31, n41, n12, n22, n32, n42, n13, n23, n33, n43, n14, n24, n34, n44) {
+    const te = this.elements;
+    // Column 1
+    te[0] = n11; te[1] = n21; te[2] = n31; te[3] = n41;
+    // Column 2
+    te[4] = n12; te[5] = n22; te[6] = n32; te[7] = n42;
+    // Column 3
+    te[8] = n13; te[9] = n23; te[10] = n33; te[11] = n43;
+    // Column 4
+    te[12] = n14; te[13] = n24; te[14] = n34; te[15] = n44;
+    return this;
+  }
+
+  /**
+   * Set this matrix to the column-major identity matrix.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  identity() {
+    this.set(
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    );
+    return this;
+  }
+
+  /**
+   * Copy the elements from another matrix into this one.
+   * @param {Matrix4} m - The matrix to copy from.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  copy(m) {
+    const te = this.elements;
+    const me = m.elements;
+    for (let i = 0; i < 16; i++) {
+      te[i] = me[i];
+    }
+    return this;
+  }
+
+  /**
+   * Multiply this matrix by another matrix (this = this * m).
+   * Uses post-multiplication suitable for column vectors (v' = M * v).
+   * @param {Matrix4} m - The matrix to multiply by.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  multiply(m) {
+    return this.multiplyMatrices(this, m);
+  }
+
+  /**
+   * Multiply this matrix by another matrix (this = m * this).
+   * Uses pre-multiplication.
+   * @param {Matrix4} m - The matrix to pre-multiply by.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  premultiply(m) {
+    return this.multiplyMatrices(m, this);
+  }
+
+  /**
+   * Sets this matrix to the multiplication of two matrices (this = a * b).
+   * Assumes column-major matrices.
+   * @param {Matrix4} a - The first matrix.
+   * @param {Matrix4} b - The second matrix.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  multiplyMatrices(a, b) {
+    const ae = a.elements;
+    const be = b.elements;
+    const te = this.elements;
+    
+    // Read elements row by row from column-major input matrices for calculation clarity
+    const a11 = ae[0], a21 = ae[4], a31 = ae[8], a41 = ae[12]; // Row 1 of A
+    const a12 = ae[1], a22 = ae[5], a32 = ae[9], a42 = ae[13]; // Row 2 of A
+    const a13 = ae[2], a23 = ae[6], a33 = ae[10], a43 = ae[14]; // Row 3 of A
+    const a14 = ae[3], a24 = ae[7], a34 = ae[11], a44 = ae[15]; // Row 4 of A
+
+    const b11 = be[0], b21 = be[4], b31 = be[8], b41 = be[12]; // Row 1 of B
+    const b12 = be[1], b22 = be[5], b32 = be[9], b42 = be[13]; // Row 2 of B
+    const b13 = be[2], b23 = be[6], b33 = be[10], b43 = be[14]; // Row 3 of B
+    const b14 = be[3], b24 = be[7], b34 = be[11], b44 = be[15]; // Row 4 of B
+
+    // Calculate result elements and store in Column-Major order
+    te[0] = a11 * b11 + a21 * b12 + a31 * b13 + a41 * b14; // Col 1, Row 1
+    te[1] = a12 * b11 + a22 * b12 + a32 * b13 + a42 * b14; // Col 1, Row 2
+    te[2] = a13 * b11 + a23 * b12 + a33 * b13 + a43 * b14; // Col 1, Row 3
+    te[3] = a14 * b11 + a24 * b12 + a34 * b13 + a44 * b14; // Col 1, Row 4
+
+    te[4] = a11 * b21 + a21 * b22 + a31 * b23 + a41 * b24; // Col 2, Row 1
+    te[5] = a12 * b21 + a22 * b22 + a32 * b23 + a42 * b24; // Col 2, Row 2
+    te[6] = a13 * b21 + a23 * b22 + a33 * b23 + a43 * b24; // Col 2, Row 3
+    te[7] = a14 * b21 + a24 * b22 + a34 * b23 + a44 * b24; // Col 2, Row 4
+
+    te[8] = a11 * b31 + a21 * b32 + a31 * b33 + a41 * b34; // Col 3, Row 1
+    te[9] = a12 * b31 + a22 * b32 + a32 * b33 + a42 * b34; // Col 3, Row 2
+    te[10] = a13 * b31 + a23 * b32 + a33 * b33 + a43 * b34; // Col 3, Row 3
+    te[11] = a14 * b31 + a24 * b32 + a34 * b33 + a44 * b34; // Col 3, Row 4
+
+    te[12] = a11 * b41 + a21 * b42 + a31 * b43 + a41 * b44; // Col 4, Row 1 (tx)
+    te[13] = a12 * b41 + a22 * b42 + a32 * b43 + a42 * b44; // Col 4, Row 2 (ty)
+    te[14] = a13 * b41 + a23 * b42 + a33 * b43 + a43 * b44; // Col 4, Row 3 (tz)
+    te[15] = a14 * b41 + a24 * b42 + a34 * b43 + a44 * b44; // Col 4, Row 4 (1)
+
+    return this;
+  }
+
+
+  /**
+   * Translates this matrix by the given vector (post-multiplication).
+   * @param {number} x - The x translation.
+   * @param {number} y - The y translation.
+   * @param {number} z - The z translation.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  translate(x, y, z) {
+    const translationMatrix = new Matrix4().makeTranslation(x, y, z);
+    return this.multiply(translationMatrix);
+  }
+
+  /**
+   * Rotates this matrix around the X axis (post-multiplication).
+   * @param {number} angleDeg - The rotation angle in degrees.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  rotateX(angleDeg) {
+    if (angleDeg === 0) return this;
+    const rotationMatrix = new Matrix4().makeRotationX(degToRad(angleDeg));
+    return this.multiply(rotationMatrix);
+  }
+
+  /**
+   * Rotates this matrix around the Y axis (post-multiplication).
+   * @param {number} angleDeg - The rotation angle in degrees.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  rotateY(angleDeg) {
+    if (angleDeg === 0) return this;
+    const rotationMatrix = new Matrix4().makeRotationY(degToRad(angleDeg));
+    return this.multiply(rotationMatrix);
+  }
+
+  /**
+   * Rotates this matrix around the Z axis (post-multiplication).
+   * @param {number} angleDeg - The rotation angle in degrees.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  rotateZ(angleDeg) {
+    if (angleDeg === 0) return this;
+    const rotationMatrix = new Matrix4().makeRotationZ(degToRad(angleDeg));
+    return this.multiply(rotationMatrix);
+  }
+
+  /**
+   * Scales this matrix by the given factors (post-multiplication).
+   * @param {number} x - The x scale factor.
+   * @param {number} y - The y scale factor.
+   * @param {number} z - The z scale factor.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  scale(x, y, z) {
+    const scalingMatrix = new Matrix4().makeScale(x, y, z);
+    return this.multiply(scalingMatrix);
+  }
+
+  /**
+   * Create a column-major translation matrix.
+   * @param {number} x - The x translation.
+   * @param {number} y - The y translation.
+   * @param {number} z - The z translation.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  makeTranslation(x, y, z) {
+    this.set(
+      1, 0, 0, 0,  // Col 1
+      0, 1, 0, 0,  // Col 2
+      0, 0, 1, 0,  // Col 3
+      x, y, z, 1   // Col 4 (tx, ty, tz, 1)
+    );
+    return this;
+  }
+
+  /**
+   * Create a column-major rotation matrix around the X axis.
+   * @param {number} angleRad - The rotation angle in radians.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  makeRotationX(angleRad) {
+    const c = Math.cos(angleRad);
+    const s = Math.sin(angleRad);
+    this.set(
+      1, 0,  0, 0,  // Col 1
+      0, c,  s, 0,  // Col 2 (m01, m11, m21, m31) -> Correct: Row 2 (m10, m11, m12, m13)
+      0, -s, c, 0,  // Col 3 (m02, m12, m22, m32) -> Correct: Row 3 (m20, m21, m22, m23)
+      0, 0,  0, 1   // Col 4
+    );
+    // Correct Column-Major for X-rotation:
+    //   1  0  0  0
+    //   0  c -s  0
+    //   0  s  c  0
+    //   0  0  0  1
+    // Becomes in elements array (columns):
+    // [1, 0, 0, 0,  0, c, s, 0,  0, -s, c, 0,  0, 0, 0, 1]
+    this.set(
+        1, 0, 0, 0,
+        0, c, s, 0,
+        0,-s, c, 0,
+        0, 0, 0, 1
+    );
+    return this;
+  }
+
+  /**
+   * Create a column-major rotation matrix around the Y axis.
+   * @param {number} angleRad - The rotation angle in radians.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  makeRotationY(angleRad) {
+    const c = Math.cos(angleRad);
+    const s = Math.sin(angleRad);
+    // Correct Column-Major for Y-rotation:
+    //   c  0  s  0
+    //   0  1  0  0
+    //  -s  0  c  0
+    //   0  0  0  1
+    // Becomes in elements array (columns):
+    // [c, 0, -s, 0,  0, 1, 0, 0,  s, 0, c, 0,  0, 0, 0, 1]
+     this.set(
+        c, 0,-s, 0,
+        0, 1, 0, 0,
+        s, 0, c, 0,
+        0, 0, 0, 1
+    );
+    return this;
+  }
+
+  /**
+   * Create a column-major rotation matrix around the Z axis.
+   * @param {number} angleRad - The rotation angle in radians.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  makeRotationZ(angleRad) {
+    const c = Math.cos(angleRad);
+    const s = Math.sin(angleRad);
+    // Correct Column-Major for Z-rotation:
+    //   c -s  0  0
+    //   s  c  0  0
+    //   0  0  1  0
+    //   0  0  0  1
+    // Becomes in elements array (columns):
+    // [c, s, 0, 0,  -s, c, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+    this.set(
+       c, s, 0, 0,
+      -s, c, 0, 0,
+       0, 0, 1, 0,
+       0, 0, 0, 1
+    );
+    return this;
+  }
+
+
+  /**
+   * Create a column-major scaling matrix.
+   * @param {number} x - The x scale factor.
+   * @param {number} y - The y scale factor.
+   * @param {number} z - The z scale factor.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  makeScale(x, y, z) {
+    this.set(
+      x, 0, 0, 0,
+      0, y, 0, 0,
+      0, 0, z, 0,
+      0, 0, 0, 1
+    );
+    return this;
+  }
+
+  /**
+   * Create a column-major perspective projection matrix.
+   * Matches the WebGL/OpenGL convention (Right-Handed system, Z points out of screen).
+   * Maps points from View Space to Clip Space (NDC range [-1, 1]).
+   * @param {number} fovRad - The vertical field of view in radians.
+   * @param {number} aspect - The aspect ratio (width / height).
+   * @param {number} near - The near clipping plane distance (must be positive).
+   * @param {number} far - The far clipping plane distance (must be positive).
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  makePerspective(fovRad, aspect, near, far) {
+    const f = 1.0 / Math.tan(fovRad / 2); // cot(fov/2)
+    const nf = 1 / (near - far);
+
+    // OpenGL Perspective Matrix (Column-Major):
+    //   f/aspect   0      0                 0
+    //   0          f      0                 0
+    //   0          0      (far+near)*nf    -1  <- Note: -1 maps Z to W
+    //   0          0      2*far*near*nf     0
+
+    const e = this.elements;
+    e[0] = f / aspect; e[1] = 0; e[2] = 0;             e[3] = 0;
+    e[4] = 0;          e[5] = f; e[6] = 0;             e[7] = 0;
+    e[8] = 0;          e[9] = 0; e[10] = (far + near) * nf; e[11] = -1;
+    e[12] = 0;         e[13] = 0;e[14] = 2 * far * near * nf;e[15] = 0;
+
+    return this;
+  }
+  
+  /**
+   * Creates a clone of this matrix.
+   * @returns {Matrix4} A new matrix with the same elements.
+   */
+  clone() {
+    return new Matrix4().copy(this);
+  }
+
+  /**
+   * Invert this matrix (column-major).
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  invert() {
+    // Based on https://github.com/mrdoob/three.js/blob/dev/src/math/Matrix4.js
+    // Adapted for column-major interpretation in comments.
+    const te = this.elements;
+    // Read elements as if it were row-major for calculation (easier cofactor logic)
+    // then store back into column-major `te`.
+    const n11 = te[0], n12 = te[4], n13 = te[8], n14 = te[12];
+    const n21 = te[1], n22 = te[5], n23 = te[9], n24 = te[13];
+    const n31 = te[2], n32 = te[6], n33 = te[10], n34 = te[14];
+    const n41 = te[3], n42 = te[7], n43 = te[11], n44 = te[15];
+
+    const t11 = n23 * n34 * n42 - n24 * n33 * n42 + n24 * n32 * n43 - n22 * n34 * n43 - n23 * n32 * n44 + n22 * n33 * n44;
+    const t12 = n14 * n33 * n42 - n13 * n34 * n42 - n14 * n32 * n43 + n12 * n34 * n43 + n13 * n32 * n44 - n12 * n33 * n44;
+    const t13 = n13 * n24 * n42 - n14 * n23 * n42 + n14 * n22 * n43 - n12 * n24 * n43 - n13 * n22 * n44 + n12 * n23 * n44;
+    const t14 = n14 * n23 * n32 - n13 * n24 * n32 - n14 * n22 * n33 + n12 * n24 * n33 + n13 * n22 * n34 - n12 * n23 * n34;
+
+    // Calculate determinant using row 1 of the conceptual row-major matrix
+    const det = n11 * t11 + n12 * t12 + n13 * t13 + n14 * t14;
+
+    if ( Math.abs(det) < 1e-10 ) { // Use Math.abs for robustness
+        console.warn( "Matrix4.invert(): determinant is zero or near-zero, matrix cannot be inverted." );
+        return this.identity(); // Return identity as a fallback
+    }
+
+    const detInv = 1 / det;
+
+    // Calculate adjugate matrix elements (transposed cofactors)
+    // and store directly into column-major `te`
+    te[ 0 ] = t11 * detInv; // Col 1, Row 1
+    te[ 1 ] = ( n24 * n33 * n41 - n23 * n34 * n41 - n24 * n31 * n43 + n21 * n34 * n43 + n23 * n31 * n44 - n21 * n33 * n44 ) * detInv; // Col 1, Row 2
+    te[ 2 ] = ( n22 * n34 * n41 - n24 * n32 * n41 + n24 * n31 * n42 - n21 * n34 * n42 - n22 * n31 * n44 + n21 * n32 * n44 ) * detInv; // Col 1, Row 3
+    te[ 3 ] = ( n23 * n32 * n41 - n22 * n33 * n41 - n23 * n31 * n42 + n21 * n33 * n42 + n22 * n31 * n43 - n21 * n32 * n43 ) * detInv; // Col 1, Row 4
+
+    te[ 4 ] = t12 * detInv; // Col 2, Row 1
+    te[ 5 ] = ( n13 * n34 * n41 - n14 * n33 * n41 + n14 * n31 * n43 - n11 * n34 * n43 - n13 * n31 * n44 + n11 * n33 * n44 ) * detInv; // Col 2, Row 2
+    te[ 6 ] = ( n14 * n32 * n41 - n12 * n34 * n41 - n14 * n31 * n42 + n11 * n34 * n42 + n12 * n31 * n44 - n11 * n32 * n44 ) * detInv; // Col 2, Row 3
+    te[ 7 ] = ( n12 * n33 * n41 - n13 * n32 * n41 + n13 * n31 * n42 - n11 * n33 * n42 - n12 * n31 * n43 + n11 * n32 * n43 ) * detInv; // Col 2, Row 4
+
+    te[ 8 ] = t13 * detInv; // Col 3, Row 1
+    te[ 9 ] = ( n14 * n23 * n41 - n13 * n24 * n41 - n14 * n21 * n43 + n11 * n24 * n43 + n13 * n21 * n44 - n11 * n23 * n44 ) * detInv; // Col 3, Row 2
+    te[ 10 ] = ( n12 * n24 * n41 - n14 * n22 * n41 + n14 * n21 * n42 - n11 * n24 * n42 - n12 * n21 * n44 + n11 * n22 * n44 ) * detInv; // Col 3, Row 3
+    te[ 11 ] = ( n13 * n22 * n41 - n12 * n23 * n41 - n13 * n21 * n42 + n11 * n23 * n42 + n12 * n21 * n43 - n11 * n22 * n43 ) * detInv; // Col 3, Row 4
+
+    te[ 12 ] = t14 * detInv; // Col 4, Row 1
+    te[ 13 ] = ( n13 * n24 * n31 - n14 * n23 * n31 + n14 * n21 * n33 - n11 * n24 * n33 - n13 * n21 * n34 + n11 * n23 * n34 ) * detInv; // Col 4, Row 2
+    te[ 14 ] = ( n14 * n22 * n31 - n12 * n24 * n31 - n14 * n21 * n32 + n11 * n24 * n32 + n12 * n21 * n34 - n11 * n22 * n34 ) * detInv; // Col 4, Row 3
+    te[ 15 ] = ( n12 * n23 * n31 - n13 * n22 * n31 + n13 * n21 * n32 - n11 * n23 * n32 - n12 * n21 * n33 + n11 * n22 * n33 ) * detInv; // Col 4, Row 4
+
+    return this;
+  }
+
+  /**
+   * Create a Column-Major orthographic projection matrix that matches the WebGL/OpenGL convention.
+   * Maps points from View Space to Clip Space (NDC range [-1, 1]).
+   * @param {number} left - Left plane coordinate.
+   * @param {number} right - Right plane coordinate.
+   * @param {number} top - Top plane coordinate.
+   * @param {number} bottom - Bottom plane coordinate.
+   * @param {number} near - Near plane distance (can be negative).
+   * @param {number} far - Far plane distance.
+   * @returns {Matrix4} This matrix for chaining.
+   */
+  makeOrthographic(left, right, top, bottom, near, far) {
+    const lr = 1 / (right - left);
+    const tb = 1 / (top - bottom); // Corrected from bottom - top
+    const nf = 1 / (far - near);   // Corrected from near - far
+
+    const tx = -(right + left) * lr; // Corrected signs
+    const ty = -(top + bottom) * tb; // Corrected signs
+    const tz = -(far + near) * nf;   // Corrected signs
+
+    const sx = 2 * lr;
+    const sy = 2 * tb;
+    const sz = -2 * nf; // Corrected sign to map near to -1, far to 1
+
+    // Set using Column-Major element order for OpenGL orthographic matrix:
+    //   sx  0   0  0
+    //   0   sy  0  0
+    //   0   0   sz 0
+    //   tx  ty  tz 1
+    // becomes:
+    // [sx, 0, 0, tx,  0, sy, 0, ty,  0, 0, sz, tz,  0, 0, 0, 1] NO, the OpenGL matrix is different.
+    //
+    // Correct OpenGL Orthographic Matrix (Column-Major):
+    //   2/(r-l)     0           0           0
+    //   0           2/(t-b)     0           0
+    //   0           0          -2/(f-n)     0
+    // -(r+l)/(r-l) -(t+b)/(t-b) -(f+n)/(f-n) 1
+    // becomes:
+    // [sx, 0, 0, 0,   0, sy, 0, 0,   0, 0, sz, 0,   tx, ty, tz, 1]
+
+    this.set(
+      sx, 0,  0,  0,  // Col 1
+      0,  sy, 0,  0,  // Col 2
+      0,  0,  sz, 0,  // Col 3
+      tx, ty, tz, 1   // Col 4
+    );
+    return this;
+  }
+
+  /**
+   * Applies this matrix transformation to a 3D vector (assuming w=1 for input).
+   * Uses column-major matrix * column vector multiplication (M * v).
+   * Returns the transformed coordinates in homogeneous form (x, y, z, w).
+   * Does NOT perform perspective division.
+   * @param {Vector3} vector - The 3D vector to transform.
+   * @returns {{x: number, y: number, z: number, w: number}} The transformed homogeneous coordinates.
+   */
+  applyToVector3(vector) {
+    const e = this.elements;
+    const x = vector.x, y = vector.y, z = vector.z;
+    const w = 1; // Assume input vector is a point
+
+    // Perform M * v where M is column-major
+    const resX = e[0] * x + e[4] * y + e[8] * z + e[12] * w; // Row 1 dot V
+    const resY = e[1] * x + e[5] * y + e[9] * z + e[13] * w; // Row 2 dot V
+    const resZ = e[2] * x + e[6] * y + e[10] * z + e[14] * w; // Row 3 dot V
+    const resW = e[3] * x + e[7] * y + e[11] * z + e[15] * w; // Row 4 dot V
+
+    return { x: resX, y: resY, z: resZ, w: resW };
+  }
+
+  /**
+  * Create a view matrix looking from eye towards target (LookAt).
+  * Uses the OpenGL convention (Right-Handed System, camera looks down -Z axis in view space).
+  * Result is a Column-Major matrix that transforms World Space to View Space.
+  * @param {Vector3} eye - Position of the camera in world space.
+  * @param {Vector3} target - Point the camera is looking at in world space.
+  * @param {Vector3} up - Up direction vector in world space (usually (0, 1, 0)).
+  * @returns {Matrix4} This matrix for chaining.
+  */
+  makeLookAt(eye, target, up) {
+      // 1. Calculate the Z axis (forward direction) of the camera's coordinate system in world space.
+      // It points from the target to the eye (opposite of the view direction).
+      const zAxis = new Vector3().subVectors(eye, target);
+      // We need the actual view direction (-zAxis) later for checks. Let's call it f.
+      const f = zAxis.clone().multiplyScalar(-1); // Forward/View direction
+
+      if (zAxis.lengthSq() === 0) {
+          // Eye and target are the same, default view direction to along world -Z
+          zAxis.set(0, 0, 1); // Points towards viewer from origin in RH system
+          f.set(0, 0, -1);
+      }
+      zAxis.normalize(); // Camera's +Z axis (points backward from view dir)
+
+      // 2. Calculate the X axis (right direction) using cross product of Up and Z axis.
+      const xAxis = new Vector3().crossVectors(up, zAxis);
+
+      if (xAxis.lengthSq() === 0) {
+          // Up and Z axis are parallel (or anti-parallel).
+          // This happens if the camera looks straight up or down.
+          // We need a robust way to handle this. If Z is vertical, use world X as tentative right.
+          if (Math.abs(up.y) === 1 && zAxis.x === 0 && zAxis.z === 0) {
+              // Looking straight up or down along Y
+               xAxis.set( (zAxis.y > 0 ? -1 : 1), 0, 0); // If looking down (+Y is up), right is -X. If looking up (-Y is up view), right is +X. Check zAxis.y sign. Corrected logic: if Z points along +Y (eye above target), right is +X. If Z points along -Y (eye below target), right is -X.
+               if (zAxis.y > 0) { // eye is above target, looking down (-Z view = +Y world)
+                   xAxis.set(1, 0, 0); // Right should be world +X
+               } else { // eye is below target, looking up (-Z view = -Y world)
+                   xAxis.set(-1, 0, 0); // Right should be world -X
+               }
+          } else {
+               // If not perfectly vertical, try crossing Z with a slightly perturbed up vector,
+               // or more simply, assume a default 'right' like world X and recalculate Up.
+               // Let's use the common approach: assume world +X is right if up is aligned with Z.
+               // This might fail if Z also aligns with X. A more robust way is needed if that's possible.
+               // For simplicity, let's recalculate Up instead if X is zero.
+               // A common fix: if Up is parallel to forward (f), choose a different Up.
+               // If Up is (0,1,0) and f is (0,y,0), use (1,0,0) as Up temporarily.
+               // If Up is (0,1,0) and f is (x,0,z) (not vertical), the cross product should work.
+
+               // Let's restart X calculation using f (view direction) to be more direct.
+               // xAxis = cross(up, f) -> No, xAxis = cross(up, zAxis) is correct.
+               // If xAxis is zero, it means up is parallel to zAxis.
+
+               // If up || zAxis, choose a new 'up'. If zAxis is (0, +/-1, 0), choose (0, 0, -/+1). Otherwise choose (0, 1, 0).
+               if (Math.abs(zAxis.y) > 0.999) { // zAxis is mostly vertical
+                   xAxis.crossVectors(new Vector3(0, 0, zAxis.y > 0 ? 1 : -1), zAxis); // Use world Z/-Z as temp up
+               } else {
+                   xAxis.crossVectors(new Vector3(0, 1, 0), zAxis); // Use world Y as temp up
+               }
+           }
+      }
+      xAxis.normalize(); // Camera's +X axis
+
+      // 3. Calculate the Y axis (up direction) using cross product of Z and X axis.
+      const yAxis = new Vector3().crossVectors(zAxis, xAxis);
+      // No need to normalize yAxis if xAxis and zAxis are orthogonal unit vectors.
+
+      // 4. Create the View Matrix (Column-Major)
+      // This matrix transforms world coordinates to camera (view) coordinates.
+      // It consists of a rotation part (inverse of camera's orientation in world)
+      // and a translation part (negative of camera's position).
+      // The rotation matrix formed by [xAxis, yAxis, zAxis] transforms camera space basis vectors
+      // INTO world space. We need the inverse, which for an orthonormal matrix is the transpose.
+      // Inverse Rotation (Transpose of [xAxis, yAxis, zAxis]):
+      //   xAxis.x, xAxis.y, xAxis.z
+      //   yAxis.x, yAxis.y, yAxis.z
+      //   zAxis.x, zAxis.y, zAxis.z
+      // Translation: -eye translated by the inverse rotation.
+      //   -xAxis.dot(eye)
+      //   -yAxis.dot(eye)
+      //   -zAxis.dot(eye)
+      // Combine into Column-Major View Matrix:
+      //   xAxis.x,  yAxis.x,  zAxis.x,  0
+      //   xAxis.y,  yAxis.y,  zAxis.y,  0
+      //   xAxis.z,  yAxis.z,  zAxis.z,  0
+      //  -dot(xAxis,eye), -dot(yAxis,eye), -dot(zAxis,eye), 1
+
+      this.set(
+          xAxis.x, yAxis.x, zAxis.x, 0, // Col 1 (Rotation part, transposed)
+          xAxis.y, yAxis.y, zAxis.y, 0, // Col 2
+          xAxis.z, yAxis.z, zAxis.z, 0, // Col 3
+          -xAxis.dot(eye), -yAxis.dot(eye), -zAxis.dot(eye), 1 // Col 4 (Translation part)
+      );
+
+      return this;
+  }
+
+
+  // Note: transformPoint removed as Vector3.applyMatrix4 handles this now.
+
+} 
+
+// --- Core Classes ---
+
+class Object3D {
+    constructor() {
+        this.position = new Vector3();
+        this.rotation = new Vector3(); // Euler angles in degrees (XYZ order assumed for now)
+        this.scale = new Vector3(1, 1, 1);
+        this.matrix = new Matrix4(); // Local transform
+        this.worldMatrix = new Matrix4(); // World transform
+        this.parent = null;
+        this.children = [];
+        this.visible = true;
+        this.geometry = null; // Holds vertices, faces, uvs etc.
+        this.material = null; // Holds color, shading info etc.
+    }
+
+    add(object) {
+        if (object === this) {
+            console.error("Object3D.add: An object cannot be added as a child of itself.", object);
+            return this;
+        }
+        if (object && object.isObject3D) { // Basic check if it's an Object3D instance
+            if (object.parent !== null) {
+                object.parent.remove(object);
+            }
+            object.parent = this;
+            this.children.push(object);
+        } else {
+            console.error("Object3D.add: Not an instance of Object3D.", object);
+        }
+        return this;
+    }
+
+    remove(object) {
+        const index = this.children.indexOf(object);
+        if (index !== - 1) {
+            object.parent = null;
+            this.children.splice(index, 1);
+        }
+        return this;
+    }
+
+    // Updates the local matrix from position, rotation, scale
+    updateMatrix() {
+        this.matrix.identity();
+        // Apply transformations in Scale -> Rotate -> Translate order
+        this.matrix.translate(this.position.x, this.position.y, this.position.z);
+        // Apply rotations (simple Euler XYZ for now)
+        this.matrix.rotateY(this.rotation.y);
+        this.matrix.rotateX(this.rotation.x);
+        this.matrix.rotateZ(this.rotation.z);
+        // Apply scale
+        this.matrix.scale(this.scale.x, this.scale.y, this.scale.z);
+    }
+
+    // Updates the world matrix based on parent's world matrix and own local matrix
+    updateWorldMatrix(force = false, parentWorldMatrix = null) {
+        this.updateMatrix(); // Always update local matrix first
+
+        if (parentWorldMatrix) {
+            this.worldMatrix.multiplyMatrices(parentWorldMatrix, this.matrix);
+        } else if (this.parent) {
+            this.worldMatrix.multiplyMatrices(this.parent.worldMatrix, this.matrix);
+        } else {
+            this.worldMatrix.copy(this.matrix);
+        }
+
+        // Update children
+        const children = this.children;
+        for (let i = 0, l = children.length; i < l; i++) {
+            children[i].updateWorldMatrix(force, this.worldMatrix);
+        }
+    }
+    
+    // Helper to easily set rotation
+    setRotation(xDeg, yDeg, zDeg) {
+        this.rotation.set(xDeg, yDeg, zDeg);
+        return this;
+    }
+    
+    // Helper to easily set position
+    setPosition(x, y, z) {
+        this.position.set(x, y, z);
+        return this;
+    }
+    
+     // Helper to get world position
+    getWorldPosition(target = new Vector3()) {
+        this.updateWorldMatrix(true); // Make sure world matrix is up-to-date
+        return target.setFromMatrixPosition(this.worldMatrix);
+    }
+}
+Object3D.prototype.isObject3D = true; // Add a flag for type checking
+
+
+class Scene extends Object3D {
+    constructor() {
+        super();
+        this.type = 'Scene';
+        this.background = null; // Could be a color, gradient, etc.
+        // Scenes don't have parents in the same way, worldMatrix is just its local matrix
+        this.worldMatrix = this.matrix; 
+    }
+
+    // Override updateWorldMatrix for Scene as it's the root
+    updateWorldMatrix(force = false) {
+        // Scene's world matrix is always its local matrix (usually identity unless the scene itself is transformed)
+        this.updateMatrix(); // Update local matrix if scene has position/rotation/scale
+        this.worldMatrix.copy(this.matrix); // World matrix is just the local matrix
+
+        // Update children relative to the scene's matrix
+        const children = this.children;
+        for (let i = 0, l = children.length; i < l; i++) {
+            children[i].updateWorldMatrix(force, this.worldMatrix);
+        }
+    }
+}
+
+class Camera extends Object3D {
+    constructor() {
+        super();
+        this.type = 'Camera';
+        this.matrixWorldInverse = new Matrix4(); // View matrix
+        this.projectionMatrix = new Matrix4();
+    }
+
+    // Override updateWorldMatrix to also update the view matrix
+    updateWorldMatrix(force = false, parentWorldMatrix = null) {
+        super.updateWorldMatrix(force, parentWorldMatrix);
+        this.matrixWorldInverse.copy(this.worldMatrix).invert();
+    }
+
+    // This method needs to be implemented by subclasses (PerspectiveCamera, OrthographicCamera)
+    updateProjectionMatrix() {
+        console.error("Camera.updateProjectionMatrix() should be implemented by subclass.");
+    }
+    
+    // Get the view direction vector in world space
+    getWorldDirection(target = new Vector3()) {
+        this.updateWorldMatrix(true); // Ensure world matrix is current
+        const e = this.worldMatrix.elements;
+        // The direction is the negative of the Z-axis of the camera's local->world matrix
+        // Column-Major: Z axis is (e[8], e[9], e[10])
+        return target.set(-e[8], -e[9], -e[10]).normalize();
+    }
+}
+Camera.prototype.isCamera = true;
+
+class PerspectiveCamera extends Camera {
+    constructor(fov = 50, aspect = 1, near = 0.1, far = 2000) {
+        super();
+        this.type = 'PerspectiveCamera';
+        this.fov = fov; // Vertical FOV in degrees
+        this.aspect = aspect;
+        this.near = near;
+        this.far = far;
+        this.updateProjectionMatrix();
+    }
+
+    updateProjectionMatrix() {
+        this.projectionMatrix.makePerspective(
+            degToRad(this.fov),
+            this.aspect,
+            this.near,
+            this.far
+        );
+    }
+    
+    // Helper to set aspect ratio, e.g., on window resize
+    setAspect(aspect) {
+        this.aspect = aspect;
+        this.updateProjectionMatrix();
+    }
+}
+
+class OrthographicCamera extends Camera {
+    constructor(left = -1, right = 1, top = 1, bottom = -1, near = 0.1, far = 2000) {
+        super();
+        this.type = 'OrthographicCamera';
+        this.left = left;
+        this.right = right;
+        this.top = top;
+        this.bottom = bottom;
+        this.near = near;
+        this.far = far;
+        this.updateProjectionMatrix();
+    }
+
+    updateProjectionMatrix() {
+        this.projectionMatrix.makeOrthographic(
+            this.left, this.right,
+            this.top, this.bottom,
+            this.near, this.far
+        );
+    }
+    
+    // Helper to update frustum size, e.g., based on viewport
+    updateFrustum(left, right, top, bottom) {
+        this.left = left;
+        this.right = right;
+        this.top = top;
+        this.bottom = bottom;
+        this.updateProjectionMatrix();
+    }
+}
+
+// Simple Material - just holds a color for now
+class Material {
+    constructor(color = '#ffffff') {
+        this.color = color; // CSS color string
+        // Could add properties like wireframe, opacity, etc. later
+    }
+}
+
+// --- Geometry Definition (Cube) ---
+class Geometry {
+    constructor() {
+        this.vertices = []; // Array of Vector3
+        this.faces = [];    // Array of faces { a, b, c, normal, materialIndex }
+        this.normals = [];  // Array of Vector3 (vertex normals, optional for now)
+        this.uvs = [];      // Array of Vector2 (optional)
+    }
+}
+
+class CubeGeometry extends Geometry {
+    constructor(width = 1, height = 1, depth = 1) {
+        super();
+        const w = width / 2;
+        const h = height / 2;
+        const d = depth / 2;
+
+        // Define vertices
+        this.vertices = [
+            new Vector3(-w, -h,  d), // 0: Front bottom left
+            new Vector3( w, -h,  d), // 1: Front bottom right
+            new Vector3( w,  h,  d), // 2: Front top right
+            new Vector3(-w,  h,  d), // 3: Front top left
+            new Vector3(-w, -h, -d), // 4: Back bottom left
+            new Vector3( w, -h, -d), // 5: Back bottom right
+            new Vector3( w,  h, -d), // 6: Back top right
+            new Vector3(-w,  h, -d)  // 7: Back top left
+        ];
+
+        // Define faces (indices into vertices array)
+        // Each face is defined by two triangles
+        // Specify material index per face for multi-color cube
+        this.faces = [
+            // Front face (z+) - Red (matIndex 0)
+            { a: 0, b: 1, c: 2, materialIndex: 0 }, { a: 0, b: 2, c: 3, materialIndex: 0 },
+            // Back face (z-) - Orange (matIndex 1)
+            { a: 5, b: 4, c: 7, materialIndex: 1 }, { a: 5, b: 7, c: 6, materialIndex: 1 },
+            // Top face (y+) - Yellow (matIndex 2)
+            { a: 3, b: 2, c: 6, materialIndex: 2 }, { a: 3, b: 6, c: 7, materialIndex: 2 },
+            // Bottom face (y-) - Green (matIndex 3)
+            { a: 4, b: 5, c: 1, materialIndex: 3 }, { a: 4, b: 1, c: 0, materialIndex: 3 },
+            // Right face (x+) - Blue (matIndex 4)
+            { a: 1, b: 5, c: 6, materialIndex: 4 }, { a: 1, b: 6, c: 2, materialIndex: 4 },
+            // Left face (x-) - Purple (matIndex 5)
+            { a: 4, b: 0, c: 3, materialIndex: 5 }, { a: 4, b: 3, c: 7, materialIndex: 5 }
+        ];
+        
+        // Calculate face normals (simple approach: average of vertex positions - not correct for lighting, but ok for backface culling)
+        // A better approach uses the cross product of two edges of the face.
+        this.computeFaceNormals();
+    }
+    
+     computeFaceNormals() {
+        const cb = new Vector3(), ab = new Vector3(); // Temp vectors
+
+        for ( let i = 0, il = this.faces.length; i < il; i ++ ) {
+            const face = this.faces[ i ];
+            const vA = this.vertices[ face.a ];
+            const vB = this.vertices[ face.b ];
+            const vC = this.vertices[ face.c ];
+
+            cb.subVectors( vC, vB );
+            ab.subVectors( vA, vB );
+            
+            const normal = new Vector3().crossVectors( cb, ab ).normalize();
+            face.normal = normal;
+        }
+    }
+}
+
+// Mesh combines Geometry and Material(s) into a renderable object
+class Mesh extends Object3D {
+    constructor(geometry, materialOrMaterials) {
+        super();
+        this.type = 'Mesh';
+        this.geometry = geometry;
+        // Support single material or array of materials (for multi-material geometry like our cube)
+        this.material = Array.isArray(materialOrMaterials) ? materialOrMaterials : [materialOrMaterials];
+    }
+}
+
+
+// --- Renderer ---
+class SVGRenderer {
+    constructor(options = {}) {
+        this.svgElement = options.svgElement || document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        if (!options.svgElement) {
+            this.svgElement.setAttribute('width', '800');
+            this.svgElement.setAttribute('height', '600');
+            document.body.appendChild(this.svgElement);
+        }
+        this.width = this.svgElement.getAttribute('width');
+        this.height = this.svgElement.getAttribute('height');
+        this.halfWidth = this.width / 2;
+        this.halfHeight = this.height / 2;
+        
+        // Define SVG namespace
+        this.svgNS = 'http://www.w3.org/2000/svg';
+        
+        // Cache for reusing polygon elements
+        this.polygonCache = [];
+        this.cacheIndex = 0;
+        
+        // Temporary vectors for calculations
+        this.projScreenMatrix = new Matrix4();
+        this.vA = new Vector3(); this.vB = new Vector3(); this.vC = new Vector3();
+        this.viewNormal = new Vector3();
+        this.viewPosition = new Vector3();
+        this.clipCoords = { a: {x:0,y:0,z:0}, b: {x:0,y:0,z:0}, c: {x:0,y:0,z:0} }; // Store clip space coords for sorting
+
+    }
+
+    setSize(width, height) {
+        this.width = width;
+        this.height = height;
+        this.halfWidth = width / 2;
+        this.halfHeight = height / 2;
+        this.svgElement.setAttribute('width', width);
+        this.svgElement.setAttribute('height', height);
+    }
+    
+    // Project 3D point (Clip Space -> Screen Space)
+    projectPoint(point) {
+        // NDC (-1 to 1) to SVG screen coordinates (0 to width, 0 to height)
+        // Note: SVG y-axis is inverted compared to NDC (0 is top)
+        const screenX = (point.x * this.halfWidth) + this.halfWidth;
+        const screenY = (-point.y * this.halfHeight) + this.halfHeight; // Invert Y
+        return { x: screenX, y: screenY, z: point.z }; // Keep z for depth sorting
+    }
+
+    render(scene, camera) {
+        this.cacheIndex = 0; // Reset polygon cache index for this frame
+
+        // Ensure camera and scene matrices are updated
+        scene.updateWorldMatrix(true); // Force update for all children
+        camera.updateWorldMatrix(true); // Force update camera matrices
+        camera.updateProjectionMatrix(); // Ensure projection is up-to-date
+
+        // Calculate combined Projection * View matrix
+        this.projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        
+        // Prepare render list (objects to be rendered)
+        const renderList = [];
+
+        // Traverse scene graph and collect meshes
+        scene.traverse((object) => {
+            if (object.isMesh && object.visible && object.geometry && object.material) {
+                 // Basic frustum culling (sphere approximation) - Needs refinement
+                // const worldPos = object.getWorldPosition(new Vector3());
+                // const viewPos = worldPos.clone().applyMatrix4(camera.matrixWorldInverse);
+                // Could check if viewPos.z is within near/far bounds approx.
+                
+                renderList.push(object);
+            }
+        });
+
+        // Process render list - transform vertices, calculate face data
+        const faceRenderData = [];
+
+        for (const mesh of renderList) {
+            const geometry = mesh.geometry;
+            const materials = mesh.material; // Array of materials
+            const matrixWorld = mesh.worldMatrix;
+            
+            // Combine Model * View * Projection
+            const modelViewProjectionMatrix = new Matrix4().multiplyMatrices(this.projScreenMatrix, matrixWorld);
+
+            for (const face of geometry.faces) {
+                 const material = materials[face.materialIndex || 0]; // Get material for this face
+                 if (!material) continue; // Skip if no material
+
+                // --- 1. Transform Vertices to Clip Space ---
+                this.vA.copy(geometry.vertices[face.a]).applyMatrix4(modelViewProjectionMatrix);
+                this.vB.copy(geometry.vertices[face.b]).applyMatrix4(modelViewProjectionMatrix);
+                this.vC.copy(geometry.vertices[face.c]).applyMatrix4(modelViewProjectionMatrix);
+                
+                // Store clip coordinates for potential later use (e.g., clipping)
+                this.clipCoords.a.x = this.vA.x; this.clipCoords.a.y = this.vA.y; this.clipCoords.a.z = this.vA.z;
+                this.clipCoords.b.x = this.vB.x; this.clipCoords.b.y = this.vB.y; this.clipCoords.b.z = this.vB.z;
+                this.clipCoords.c.x = this.vC.x; this.clipCoords.c.y = this.vC.y; this.clipCoords.c.z = this.vC.z;
+
+
+                 // --- Clipping (Basic Check - needs full Sutherland-Hodgman for correctness) ---
+                 // Check if all vertices are outside the same frustum plane (trivial rejection)
+                 // Clip space is [-1, 1] for x, y, z (after perspective divide, but we haven't divided yet)
+                 // Check against w component before division: point is outside if x < -w, x > w, y < -w, y > w, z < -w, z > w
+                 // For simplicity, we'll check Z in clip space for now.
+                 // A more robust check involves checking against near/far planes (z values).
+                 // Let's skip full clipping for now and rely on Z-sort + backface culling.
+                 // A basic check: if all z > 1 or all z < -1 after projection, clip.
+                 // Note: Z is in [-1, 1] in clip space AFTER perspective divide. Before division, it's view space Z.
+                 // Let's use view space Z for backface culling and basic near/far check.
+
+                 // --- 2. Backface Culling (in View Space) ---
+                 // Transform face normal to View Space
+                 this.viewNormal.copy(face.normal)
+                     .transformDirection(mesh.worldMatrix) // To World Space Normal
+                     .transformDirection(camera.matrixWorldInverse); // To View Space Normal
+
+                 // Transform one vertex (e.g., A) to View Space to get view vector
+                 this.viewPosition.copy(geometry.vertices[face.a])
+                     .applyMatrix4AsPoint(mesh.worldMatrix) // To World Space vertex pos
+                     .applyMatrix4AsPoint(camera.matrixWorldInverse); // To View Space vertex pos
+
+                 // Check dot product: normal.dot(vector_from_camera_to_vertex)
+                 // In OpenGL view space, camera is at origin, looking down -Z.
+                 // A vertex position vector IS the vector from camera to vertex.
+                 // If normal.dot(viewPosition) > 0, the face is looking away from camera (back-facing).
+                 // However, it's often simpler to check viewNormal.z:
+                 // If viewNormal.z > 0, it points towards the camera (in view space where camera looks down -Z).
+                 // We want to render faces where viewNormal.z <= 0 (pointing away or perpendicular)
+                 // Let's use the dot product approach for clarity.
+                 
+                 // Calculate vector from camera (origin in view space) to face (using vA's view pos)
+                 // const viewVector = this.viewPosition.clone().multiplyScalar(-1).normalize(); // Vector pointing towards camera
+                 // if (this.viewNormal.dot(viewVector) < 0) continue; // Back-face culling (normal points away from camera view vector)
+
+                 // Simpler: If viewNormal.z > 0 (normal's Z component in View Space is positive),
+                 // it means the normal is pointing towards the camera's origin (along +Z in view space).
+                 // Since the camera looks down -Z, this face is potentially visible.
+                 // If viewNormal.z <= 0, the face points away or is edge-on. Let's use <= 0 cull threshold.
+                 
+                 // Correction: In standard OpenGL right-handed view space (camera looks down -Z),
+                 // faces whose normals point generally towards +Z (away from the camera) are back-facing.
+                 // So, we should render if viewNormal.z < 0.
+                 if (this.viewNormal.z >= 0) continue; // Back-face culling
+
+
+                 // --- 3. Project to Screen Space ---
+                 const screenA = this.projectPoint(this.vA);
+                 const screenB = this.projectPoint(this.vB);
+                 const screenC = this.projectPoint(this.vC);
+
+                 // --- 4. Calculate Average Z for sorting ---
+                 // Use average Z in *clip space* before projection for better sorting
+                 const avgZ = (this.clipCoords.a.z + this.clipCoords.b.z + this.clipCoords.c.z) / 3.0;
+                 // Alternative: Average Z in View Space (might be more intuitive but less correct after projection)
+                 // const avgZ_view = (this.viewPositionA.z + this.viewPositionB.z + this.viewPositionC.z) / 3.0;
+
+                 faceRenderData.push({
+                     points: [screenA, screenB, screenC],
+                     color: material.color,
+                     zIndex: avgZ // Use average clip-space Z for sorting
+                 });
+            }
+        }
+
+        // --- 5. Z-Sorting (Painter's Algorithm) ---
+        // Sort faces from farthest to nearest (descending Z in clip space [-1, 1])
+        // Clip space: -1 is near, 1 is far. So sort descending.
+        faceRenderData.sort((a, b) => b.zIndex - a.zIndex);
+
+        // --- 6. Render SVG Polygons ---
+        // Clear previous frame (simple approach: remove all children)
+        // A better way is to reuse/update existing polygon elements.
+        // while (this.svgElement.firstChild) {
+        //     this.svgElement.removeChild(this.svgElement.firstChild);
+        // }
+        
+        // Reuse polygons from cache
+        for (const data of faceRenderData) {
+            let polygon;
+            if (this.cacheIndex < this.polygonCache.length) {
+                polygon = this.polygonCache[this.cacheIndex];
+            } else {
+                polygon = document.createElementNS(this.svgNS, 'polygon');
+                this.polygonCache.push(polygon);
+                this.svgElement.appendChild(polygon);
+            }
+            this.cacheIndex++;
+
+            const pointsString = data.points.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
+            polygon.setAttribute('points', pointsString);
+            polygon.setAttribute('fill', data.color);
+            // Optional: Add stroke for wireframe effect
+            // polygon.setAttribute('stroke', 'black');
+            // polygon.setAttribute('stroke-width', '0.5');
+            polygon.style.display = ''; // Make sure it's visible
+        }
+        
+        // Hide unused polygons from cache
+        for (let i = this.cacheIndex; i < this.polygonCache.length; i++) {
+             this.polygonCache[i].style.display = 'none';
+        }
+    }
+}
+
+// Add traverse method to Object3D prototype for convenience
+Object3D.prototype.traverse = function (callback) {
+	callback( this );
+	const children = this.children;
+	for ( let i = 0, l = children.length; i < l; i ++ ) {
+		children[ i ].traverse( callback );
+	}
+};
+
+// --- Orbit Controller ---
+class OrbitControls {
+    constructor(camera, domElement) {
+        this.camera = camera;
+        this.domElement = domElement;
+        this.target = new Vector3(0, 0, 0); // Point to look at
+
+        this.minDistance = 1;
+        this.maxDistance = 20;
+        this.zoomSpeed = 1.0;
+
+        this.minPolarAngle = 0; // radians
+        this.maxPolarAngle = Math.PI; // radians
+
+        this.minAzimuthAngle = -Infinity; // radians
+        this.maxAzimuthAngle = Infinity; // radians
+
+        this.enableDamping = true;
+        this.dampingFactor = 0.05;
+
+        this.enableZoom = true;
+        this.enablePan = true; // Not implemented yet
+        this.enableRotate = true;
+
+        // Internal state
+        this.spherical = { radius: 5, phi: Math.PI / 2, theta: 0 }; // phi: polar angle from y+, theta: azimuth angle from z+
+        this.sphericalDelta = { radius: 0, phi: 0, theta: 0 };
+        this.sphericalTarget = { radius: 5, phi: Math.PI / 2, theta: 0 };
+
+        this.panOffset = new Vector3(); // Not used yet
+        this.zoomDistance = this.spherical.radius;
+
+        // Mouse state
+        this.state = 'NONE'; // NONE, ROTATE, ZOOM, PAN
+        this.rotateStart = { x: 0, y: 0 };
+        this.rotateEnd = { x: 0, y: 0 };
+        this.rotateDelta = { x: 0, y: 0 };
+        this.zoomStart = 0;
+        this.zoomEnd = 0;
+
+
+        // --- Event Listeners ---
+        this.onMouseDown = (event) => {
+            if (!this.enableRotate) return;
+            event.preventDefault();
+            switch (event.button) {
+                case 0: // left
+                    this.state = 'ROTATE';
+                    this.rotateStart.x = event.clientX;
+                    this.rotateStart.y = event.clientY;
+                    break;
+                // case 1: // middle (pan) - Not implemented
+                // case 2: // right (zoom) - Using wheel instead
+            }
+            this.domElement.addEventListener('mousemove', this.onMouseMove, false);
+            this.domElement.addEventListener('mouseup', this.onMouseUp, false);
+        };
+
+        this.onMouseMove = (event) => {
+            event.preventDefault();
+            if (this.state === 'ROTATE') {
+                this.rotateEnd.x = event.clientX;
+                this.rotateEnd.y = event.clientY;
+                this.rotateDelta.x = this.rotateEnd.x - this.rotateStart.x;
+                this.rotateDelta.y = this.rotateEnd.y - this.rotateStart.y;
+                
+                const element = this.domElement;
+                const width = element.clientWidth || 1; // Use clientWidth for actual rendered size
+                const height = element.clientHeight || 1;
+
+                // Calculate rotation angles based on mouse movement
+                // Movement across full width rotates ~360 degrees (2*PI)
+                this.sphericalDelta.theta -= 2 * Math.PI * this.rotateDelta.x / width;
+                 // Movement across full height rotates ~180 degrees (PI)
+                this.sphericalDelta.phi -= 2 * Math.PI * this.rotateDelta.y / height; // Use 2*PI here too for sensitivity
+
+                this.rotateStart.x = this.rotateEnd.x;
+                this.rotateStart.y = this.rotateEnd.y;
+            }
+            // Handle PAN and ZOOM here if using mouse move
+        };
+
+        this.onMouseUp = (event) => {
+            this.domElement.removeEventListener('mousemove', this.onMouseMove, false);
+            this.domElement.removeEventListener('mouseup', this.onMouseUp, false);
+            this.state = 'NONE';
+        };
+        
+        this.onMouseWheel = (event) => {
+            if (!this.enableZoom) return;
+            event.preventDefault();
+            event.stopPropagation();
+            
+            let delta = 0;
+            if (event.deltaY) { // Modern browsers
+                 delta = -event.deltaY;
+            } else if (event.wheelDelta) { // Legacy
+                 delta = event.wheelDelta;
+            } else if (event.detail) { // Firefox legacy
+                delta = -event.detail;
+            }
+
+            // Adjust zoom based on delta direction and magnitude
+            if (delta > 0) {
+                this.zoomDistance /= Math.pow(0.95, this.zoomSpeed); // Zoom in
+            } else if (delta < 0) {
+                this.zoomDistance *= Math.pow(0.95, this.zoomSpeed); // Zoom out
+            }
+             this.sphericalDelta.radius += (this.zoomDistance - this.sphericalTarget.radius) * this.zoomSpeed * 0.1; // Smooth zoom target change
+        };
+        
+        this.onTouchStart = ( event ) => {
+			if ( !this.enableRotate ) return;
+			event.preventDefault(); // Prevent scrolling/refresh gestures
+
+			switch ( event.touches.length ) {
+				case 1: // Single finger touch for rotate
+					this.state = 'ROTATE';
+					this.rotateStart.x = event.touches[ 0 ].pageX;
+					this.rotateStart.y = event.touches[ 0 ].pageY;
+					break;
+                case 2: // Two finger touch for zoom
+                    if (!this.enableZoom) return;
+					this.state = 'ZOOM';
+                    const dx = event.touches[ 0 ].pageX - event.touches[ 1 ].pageX;
+					const dy = event.touches[ 0 ].pageY - event.touches[ 1 ].pageY;
+					this.zoomStart = Math.sqrt( dx * dx + dy * dy );
+                    break;
+				default:
+					this.state = 'NONE';
+			}
+            
+            // Add touch move/end listeners to the document to capture movement outside the element
+            document.addEventListener('touchmove', this.onTouchMove, { passive: false });
+            document.addEventListener('touchend', this.onTouchEnd, false);
+		};
+        
+        this.onTouchMove = ( event ) => {
+            event.preventDefault(); // Prevent scrolling/refresh gestures
+
+            switch ( this.state ) { // Use current state determined by touch start
+                case 'ROTATE':
+                    if (event.touches.length === 1) {
+                        this.rotateEnd.x = event.touches[ 0 ].pageX;
+                        this.rotateEnd.y = event.touches[ 0 ].pageY;
+                        this.rotateDelta.x = this.rotateEnd.x - this.rotateStart.x;
+                        this.rotateDelta.y = this.rotateEnd.y - this.rotateStart.y;
+                        
+                        const element = this.domElement;
+                        const width = element.clientWidth || 1;
+                        const height = element.clientHeight || 1;
+
+                        this.sphericalDelta.theta -= 2 * Math.PI * this.rotateDelta.x / width;
+                        this.sphericalDelta.phi -= 2 * Math.PI * this.rotateDelta.y / height;
+
+                        this.rotateStart.x = this.rotateEnd.x;
+                        this.rotateStart.y = this.rotateEnd.y;
+                    }
+                    break;
+                case 'ZOOM':
+                     if (event.touches.length === 2) {
+                        const dx = event.touches[ 0 ].pageX - event.touches[ 1 ].pageX;
+                        const dy = event.touches[ 0 ].pageY - event.touches[ 1 ].pageY;
+                        this.zoomEnd = Math.sqrt( dx * dx + dy * dy );
+                        
+                        // Calculate zoom factor based on pinch distance change
+                        const zoomFactor = this.zoomStart / this.zoomEnd; 
+                        this.zoomDistance *= zoomFactor; // Apply zoom
+                        this.sphericalDelta.radius += (this.zoomDistance - this.sphericalTarget.radius) * this.zoomSpeed * 0.1; // Adjust target
+
+                        this.zoomStart = this.zoomEnd; // Update start distance for next move event
+                    }
+                    break;
+            }
+        };
+
+        this.onTouchEnd = ( event ) => {
+            document.removeEventListener('touchmove', this.onTouchMove);
+            document.removeEventListener('touchend', this.onTouchEnd);
+            this.state = 'NONE';
+		};
+
+
+        this.domElement.addEventListener('mousedown', this.onMouseDown, false);
+        this.domElement.addEventListener('wheel', this.onMouseWheel, { passive: false }); // Use passive: false if preventDefault is called
+        
+        // Touch events
+        this.domElement.addEventListener( 'touchstart', this.onTouchStart, { passive: false } );
+
+
+        // Initial update
+        this.update();
+    }
+
+    update() {
+        // Calculate offset vector from target based on spherical coordinates
+        const offset = new Vector3();
+        // Calculate desired radius based on zoom input
+        this.zoomDistance = Math.max(this.minDistance, Math.min(this.maxDistance, this.zoomDistance));
+        this.sphericalTarget.radius = this.zoomDistance; // Target radius is now directly controlled by zoom
+
+        // Apply damping to changes
+        if (this.enableDamping) {
+            this.sphericalTarget.theta += this.sphericalDelta.theta;
+            this.sphericalTarget.phi += this.sphericalDelta.phi;
+            // Radius target is already set above
+            
+            // Clamp target values
+            this.sphericalTarget.theta = Math.max(this.minAzimuthAngle, Math.min(this.maxAzimuthAngle, this.sphericalTarget.theta));
+            this.sphericalTarget.phi = Math.max(this.minPolarAngle + 1e-6, Math.min(this.maxPolarAngle - 1e-6, this.sphericalTarget.phi)); // Add epsilon
+            // Radius is clamped in zoomDistance assignment
+
+            // Interpolate current spherical towards target
+            this.spherical.theta += (this.sphericalTarget.theta - this.spherical.theta) * this.dampingFactor;
+            this.spherical.phi += (this.sphericalTarget.phi - this.spherical.phi) * this.dampingFactor;
+            this.spherical.radius += (this.sphericalTarget.radius - this.spherical.radius) * this.dampingFactor;
+
+            // Reset deltas after applying damping factor
+            this.sphericalDelta.theta *= (1 - this.dampingFactor);
+            this.sphericalDelta.phi *= (1 - this.dampingFactor);
+            this.sphericalDelta.radius = 0; // Reset radius delta as target is now zoomDistance
+
+        } else {
+            // Apply deltas directly if damping is disabled
+            this.spherical.theta += this.sphericalDelta.theta;
+            this.spherical.phi += this.sphericalDelta.phi;
+            this.spherical.radius = this.sphericalTarget.radius; // Use target radius directly
+            
+            // Clamp final values
+            this.spherical.theta = Math.max(this.minAzimuthAngle, Math.min(this.maxAzimuthAngle, this.spherical.theta));
+            this.spherical.phi = Math.max(this.minPolarAngle + 1e-6, Math.min(this.maxPolarAngle - 1e-6, this.spherical.phi));
+            this.spherical.radius = Math.max(this.minDistance, Math.min(this.maxDistance, this.spherical.radius));
+            this.zoomDistance = this.spherical.radius; // Sync zoomDistance
+
+            // Reset deltas
+            this.sphericalDelta.theta = 0;
+            this.sphericalDelta.phi = 0;
+            this.sphericalDelta.radius = 0;
+            
+             // Update target to match current if not damping
+            this.sphericalTarget.theta = this.spherical.theta;
+            this.sphericalTarget.phi = this.spherical.phi;
+            // No need to copy sphericalTarget.radius as it's directly driven by zoomDistance
+        }
+
+        // Recalculate offset based on the possibly clamped/damped spherical values
+        const sinPhiRadiusClamped = Math.sin(this.spherical.phi) * this.spherical.radius;
+        offset.x = sinPhiRadiusClamped * Math.sin(this.spherical.theta);
+        offset.y = Math.cos(this.spherical.phi) * this.spherical.radius;
+        offset.z = sinPhiRadiusClamped * Math.cos(this.spherical.theta);
+
+        // Calculate final camera position
+        const finalPosition = new Vector3().copy(this.target).add(offset);
+
+        // --- Direct View Matrix Calculation ---
+        // Set the camera's view matrix directly using makeLookAt
+        this.camera.matrixWorldInverse.makeLookAt(finalPosition, this.target, new Vector3(0, 1, 0));
+        
+        // Update the camera's world matrix from the inverse of the view matrix
+        // This ensures camera.worldMatrix is correct for potential use elsewhere (e.g., getting world position)
+        this.camera.worldMatrix.copy(this.camera.matrixWorldInverse).invert();
+        
+        // Update the camera's position property to reflect the calculated position
+        // (Rotation/scale properties won't be automatically updated from the matrix here)
+        this.camera.position.copy(finalPosition);
+        // --- End Direct View Matrix Calculation ---
+        
+        // Check if update is needed (if deltas are non-negligible, or significant change occurred)
+        // Use a slightly larger threshold for checking actual change vs target change
+        const changeMagnitude = Math.abs(this.sphericalDelta.theta) + Math.abs(this.sphericalDelta.phi) + Math.abs(this.spherical.radius - this.sphericalTarget.radius);
+        return changeMagnitude > 1e-4;
+    }
+    
+    // Remove the redundant Object3D lookAt helper from OrbitControls
+    /* lookAt( targetVec ) { // Method for Object3D
+		const _matrix = new Matrix4();
+        const _vector = new Vector3(); // Temp vector
+        // This method is for Object3D, so 'this' refers to the object (e.g., camera)
+		_matrix.makeLookAt( this.position, targetVec, new Vector3(0,1,0) ); // Assume world up is (0,1,0) for simplicity
+		// Need to extract rotation (quaternion or Euler) from this matrix
+        // This is complex. OrbitControls should directly calculate camera position
+        // and then call camera.lookAt(target), which internally handles setting orientation.
+        // The camera.lookAt method needs implementation in Object3D or Camera.
+        console.warn("Object3D.lookAt not fully implemented for rotation extraction.");
+	} */
+}
+
+// Remove the Object3D.prototype.lookAt assignment as it's not used/correctly implemented
+/*
+Object3D.prototype.lookAt = function(targetVec) {
+// ... existing code ...
+    // The makeLookAt in OrbitControls was redundant if we set position and let Camera handle its matrix.
+};
+*/
+
+
+// --- Animation Setup ---
+const svgElement = document.getElementById('renderer');
+const renderer = new SVGRenderer({ svgElement: svgElement });
+const scene = new Scene();
+const camera = new PerspectiveCamera(75, renderer.width / renderer.height, 0.1, 100);
+camera.position.set(0, 2, 5); // Initial camera position
+const controls = new OrbitControls(camera, renderer.svgElement);
+controls.target.set(0, 0, 0); // Look at the origin
+controls.minDistance = 2;
+controls.maxDistance = 15;
+controls.enableDamping = true;
+controls.dampingFactor = 0.1;
+
+
+// Create Cube
+const cubeGeometry = new CubeGeometry(1.5, 1.5, 1.5);
+const cubeMaterials = [
+    new Material('#ff0000'), // Front (Red)
+    new Material('#ffa500'), // Back (Orange)
+    new Material('#ffff00'), // Top (Yellow)
+    new Material('#00ff00'), // Bottom (Green)
+    new Material('#0000ff'), // Right (Blue)
+    new Material('#800080')  // Left (Purple)
+];
+const cube = new Mesh(cubeGeometry, cubeMaterials);
+scene.add(cube);
+
+// Handle window resize
+window.addEventListener('resize', () => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    renderer.setSize(width, height);
+    camera.setAspect(width / height);
+    camera.updateProjectionMatrix();
+});
+// Initial size setup
+window.dispatchEvent(new Event('resize'));
+
+// Animation loop
+let angle = 0; // For automatic rotation (if needed)
+function animate() {
+    requestAnimationFrame(animate);
+
+    // Optional: Add automatic rotation to the cube
+    // cube.rotation.y += 0.5; // Rotate cube around its Y axis
+    // cube.rotation.x += 0.2;
+    
+    // Instead of cube rotation, let's make the camera orbit automatically for demo
+    // Comment this out if you want manual control only
+    // const orbitSpeed = 0.005; // Radians per frame
+    // controls.sphericalDelta.theta += orbitSpeed; // Add small rotation delta each frame
+
+
+    controls.update(); // Update controls (applies damping, calculates new position)
+    renderer.render(scene, camera);
+}
+
+// Start animation
+animate();
+
+
+    </script>
+</body>
+</html>

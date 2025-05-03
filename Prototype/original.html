@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D SVG Renderer</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    #container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background-color: #111;
+    }
+    svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      background-color: rgba(0,0,0,0.5);
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  <div id="info">3D SVG Renderer - Custom Perspective Projection</div>
+
+  <script>
+    // ---- Math Utilities ----
+    class Vector3 {
+      constructor(x = 0, y = 0, z = 0) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+      }
+      
+      set(x, y, z) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        return this;
+      }
+      
+      copy(v) {
+        this.x = v.x;
+        this.y = v.y;
+        this.z = v.z;
+        return this;
+      }
+      
+      clone() {
+        return new Vector3(this.x, this.y, this.z);
+      }
+      
+      add(v) {
+        this.x += v.x;
+        this.y += v.y;
+        this.z += v.z;
+        return this;
+      }
+      
+      sub(v) {
+        this.x -= v.x;
+        this.y -= v.y;
+        this.z -= v.z;
+        return this;
+      }
+      
+      multiplyScalar(s) {
+        this.x *= s;
+        this.y *= s;
+        this.z *= s;
+        return this;
+      }
+      
+      divideScalar(s) {
+        if (s !== 0) {
+          this.x /= s;
+          this.y /= s;
+          this.z /= s;
+        }
+        return this;
+      }
+      
+      length() {
+        return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+      }
+      
+      normalize() {
+        return this.divideScalar(this.length() || 1);
+      }
+      
+      cross(v) {
+        const x = this.y * v.z - this.z * v.y;
+        const y = this.z * v.x - this.x * v.z;
+        const z = this.x * v.y - this.y * v.x;
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        return this;
+      }
+      
+      dot(v) {
+        return this.x * v.x + this.y * v.y + this.z * v.z;
+      }
+    }
+
+    class Matrix4 {
+      constructor() {
+        this.elements = [
+          1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1
+        ];
+      }
+      
+      copy(m) {
+        const te = this.elements;
+        const me = m.elements;
+        
+        for (let i = 0; i < 16; i++) {
+          te[i] = me[i];
+        }
+        
+        return this;
+      }
+      
+      set(n11, n12, n13, n14, n21, n22, n23, n24, n31, n32, n33, n34, n41, n42, n43, n44) {
+        const te = this.elements;
+        
+        te[0] = n11; te[1] = n12; te[2] = n13; te[3] = n14;
+        te[4] = n21; te[5] = n22; te[6] = n23; te[7] = n24;
+        te[8] = n31; te[9] = n32; te[10] = n33; te[11] = n34;
+        te[12] = n41; te[13] = n42; te[14] = n43; te[15] = n44;
+        
+        return this;
+      }
+      
+      identity() {
+        return this.set(
+          1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1
+        );
+      }
+      
+      clone() {
+        return new Matrix4().copy(this);
+      }
+      
+      multiply(m) {
+        return this.multiplyMatrices(this, m);
+      }
+      
+      premultiply(m) {
+        return this.multiplyMatrices(m, this);
+      }
+      
+      multiplyMatrices(a, b) {
+        // Cache elements in local variables to improve readability
+        const ae = a.elements;
+        const be = b.elements;
+        const te = this.elements;
+        
+        const a11 = ae[0], a12 = ae[1], a13 = ae[2], a14 = ae[3];
+        const a21 = ae[4], a22 = ae[5], a23 = ae[6], a24 = ae[7];
+        const a31 = ae[8], a32 = ae[9], a33 = ae[10], a34 = ae[11];
+        const a41 = ae[12], a42 = ae[13], a43 = ae[14], a44 = ae[15];
+        
+        const b11 = be[0], b12 = be[1], b13 = be[2], b14 = be[3];
+        const b21 = be[4], b22 = be[5], b23 = be[6], b24 = be[7];
+        const b31 = be[8], b32 = be[9], b33 = be[10], b34 = be[11];
+        const b41 = be[12], b42 = be[13], b43 = be[14], b44 = be[15];
+        
+        te[0] = a11 * b11 + a12 * b21 + a13 * b31 + a14 * b41;
+        te[1] = a11 * b12 + a12 * b22 + a13 * b32 + a14 * b42;
+        te[2] = a11 * b13 + a12 * b23 + a13 * b33 + a14 * b43;
+        te[3] = a11 * b14 + a12 * b24 + a13 * b34 + a14 * b44;
+        
+        te[4] = a21 * b11 + a22 * b21 + a23 * b31 + a24 * b41;
+        te[5] = a21 * b12 + a22 * b22 + a23 * b32 + a24 * b42;
+        te[6] = a21 * b13 + a22 * b23 + a23 * b33 + a24 * b43;
+        te[7] = a21 * b14 + a22 * b24 + a23 * b34 + a24 * b44;
+        
+        te[8] = a31 * b11 + a32 * b21 + a33 * b31 + a34 * b41;
+        te[9] = a31 * b12 + a32 * b22 + a33 * b32 + a34 * b42;
+        te[10] = a31 * b13 + a32 * b23 + a33 * b33 + a34 * b43;
+        te[11] = a31 * b14 + a32 * b24 + a33 * b34 + a34 * b44;
+        
+        te[12] = a41 * b11 + a42 * b21 + a43 * b31 + a44 * b41;
+        te[13] = a41 * b12 + a42 * b22 + a43 * b32 + a44 * b42;
+        te[14] = a41 * b13 + a42 * b23 + a43 * b33 + a44 * b43;
+        te[15] = a41 * b14 + a42 * b24 + a43 * b34 + a44 * b44;
+        
+        return this;
+      }
+      
+      makeTranslation(x, y, z) {
+        return this.set(
+          1, 0, 0, x,
+          0, 1, 0, y,
+          0, 0, 1, z,
+          0, 0, 0, 1
+        );
+      }
+      
+      makeRotationX(theta) {
+        const c = Math.cos(theta);
+        const s = Math.sin(theta);
+        
+        // Rotation around X axis
+        //  1  0  0  0
+        //  0  c -s  0
+        //  0  s  c  0
+        //  0  0  0  1
+        return this.set(
+          1, 0, 0, 0,
+          0, c, -s, 0,
+          0, s, c, 0,
+          0, 0, 0, 1
+        );
+      }
+      
+      makeRotationY(theta) {
+        const c = Math.cos(theta);
+        const s = Math.sin(theta);
+        
+        // Rotation around Y axis
+        //  c  0  s  0
+        //  0  1  0  0
+        // -s  0  c  0
+        //  0  0  0  1
+        return this.set(
+          c, 0, s, 0,
+          0, 1, 0, 0,
+          -s, 0, c, 0,
+          0, 0, 0, 1
+        );
+      }
+      
+      makeRotationZ(theta) {
+        const c = Math.cos(theta);
+        const s = Math.sin(theta);
+        
+        // Rotation around Z axis
+        //  c -s  0  0
+        //  s  c  0  0
+        //  0  0  1  0
+        //  0  0  0  1
+        return this.set(
+          c, -s, 0, 0,
+          s, c, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1
+        );
+      }
+      
+      // Invert the matrix - needed for camera view matrix
+      invert() {
+        // Based on http://www.euclideanspace.com/maths/algebra/matrix/functions/inverse/fourD/index.htm
+        const te = this.elements,
+          n11 = te[0], n12 = te[1], n13 = te[2], n14 = te[3],
+          n21 = te[4], n22 = te[5], n23 = te[6], n24 = te[7],
+          n31 = te[8], n32 = te[9], n33 = te[10], n34 = te[11],
+          n41 = te[12], n42 = te[13], n43 = te[14], n44 = te[15],
+          
+          t11 = n23 * n34 * n42 - n24 * n33 * n42 + n24 * n32 * n43 - n22 * n34 * n43 - n23 * n32 * n44 + n22 * n33 * n44,
+          t12 = n14 * n33 * n42 - n13 * n34 * n42 - n14 * n32 * n43 + n12 * n34 * n43 + n13 * n32 * n44 - n12 * n33 * n44,
+          t13 = n13 * n24 * n42 - n14 * n23 * n42 + n14 * n22 * n43 - n12 * n24 * n43 - n13 * n22 * n44 + n12 * n23 * n44,
+          t14 = n14 * n23 * n32 - n13 * n24 * n32 - n14 * n22 * n33 + n12 * n24 * n33 + n13 * n22 * n34 - n12 * n23 * n34;
+        
+        const det = n11 * t11 + n21 * t12 + n31 * t13 + n41 * t14;
+        
+        if (det === 0) {
+          return this.set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        }
+        
+        const detInv = 1 / det;
+        
+        te[0] = t11 * detInv;
+        te[1] = (n24 * n33 * n41 - n23 * n34 * n41 - n24 * n31 * n43 + n21 * n34 * n43 + n23 * n31 * n44 - n21 * n33 * n44) * detInv;
+        te[2] = (n22 * n34 * n41 - n24 * n32 * n41 + n24 * n31 * n42 - n21 * n34 * n42 - n22 * n31 * n44 + n21 * n32 * n44) * detInv;
+        te[3] = (n23 * n32 * n41 - n22 * n33 * n41 - n23 * n31 * n42 + n21 * n33 * n42 + n22 * n31 * n43 - n21 * n32 * n43) * detInv;
+        
+        te[4] = t12 * detInv;
+        te[5] = (n13 * n34 * n41 - n14 * n33 * n41 + n14 * n31 * n43 - n11 * n34 * n43 - n13 * n31 * n44 + n11 * n33 * n44) * detInv;
+        te[6] = (n14 * n32 * n41 - n12 * n34 * n41 - n14 * n31 * n42 + n11 * n34 * n42 + n12 * n31 * n44 - n11 * n32 * n44) * detInv;
+        te[7] = (n12 * n33 * n41 - n13 * n32 * n41 + n13 * n31 * n42 - n11 * n33 * n42 - n12 * n31 * n43 + n11 * n32 * n43) * detInv;
+        
+        te[8] = t13 * detInv;
+        te[9] = (n14 * n23 * n41 - n13 * n24 * n41 - n14 * n21 * n43 + n11 * n24 * n43 + n13 * n21 * n44 - n11 * n23 * n44) * detInv;
+        te[10] = (n12 * n24 * n41 - n14 * n22 * n41 + n14 * n21 * n42 - n11 * n24 * n42 - n12 * n21 * n44 + n11 * n22 * n44) * detInv;
+        te[11] = (n13 * n22 * n41 - n12 * n23 * n41 - n13 * n21 * n42 + n11 * n23 * n42 + n12 * n21 * n43 - n11 * n22 * n43) * detInv;
+        
+        te[12] = t14 * detInv;
+        te[13] = (n13 * n24 * n31 - n14 * n23 * n31 + n14 * n21 * n33 - n11 * n24 * n33 - n13 * n21 * n34 + n11 * n23 * n34) * detInv;
+        te[14] = (n14 * n22 * n31 - n12 * n24 * n31 - n14 * n21 * n32 + n11 * n24 * n32 + n12 * n21 * n34 - n11 * n22 * n34) * detInv;
+        te[15] = (n12 * n23 * n31 - n13 * n22 * n31 + n13 * n21 * n32 - n11 * n23 * n32 - n12 * n21 * n33 + n11 * n22 * n33) * detInv;
+        
+        return this;
+      }
+      
+      makePerspective(fov, aspect, near, far) {
+        const top = near * Math.tan(fov * 0.5);
+        const height = 2 * top;
+        const width = aspect * height;
+        const left = -width / 2;
+        const right = left + width;
+        const bottom = -top;
+        
+        // Standard perspective projection matrix
+        // 2*n/(r-l)     0         (r+l)/(r-l)     0
+        //     0      2*n/(t-b)    (t+b)/(t-b)     0
+        //     0         0        -(f+n)/(f-n)  -2*f*n/(f-n)
+        //     0         0             -1           0
+        const x = 2 * near / (right - left);
+        const y = 2 * near / (top - bottom);
+        
+        const a = (right + left) / (right - left);
+        const b = (top + bottom) / (top - bottom);
+        const c = -(far + near) / (far - near);
+        const d = -2 * far * near / (far - near);
+        
+        return this.set(
+          x, 0, a, 0,
+          0, y, b, 0,
+          0, 0, c, d,
+          0, 0, -1, 0
+        );
+      }
+      
+      lookAt(eye, target, up) {
+        if (!eye || !target || !up) return this;
+        
+        const z = new Vector3().copy(eye).sub(target).normalize();
+        
+        if (z.length() === 0) {
+          z.z = 1;
+        }
+        
+        const x = new Vector3().copy(up).cross(z).normalize();
+        
+        if (x.length() === 0) {
+          z.z += 0.0001;
+          x.copy(up).cross(z).normalize();
+        }
+        
+        const y = new Vector3().copy(z).cross(x);
+        
+        // Build the rotation matrix
+        this.set(
+          x.x, y.x, z.x, 0,
+          x.y, y.y, z.y, 0,
+          x.z, y.z, z.z, 0,
+          0, 0, 0, 1
+        );
+        
+        // Apply translation
+        const te = this.elements;
+        te[3] = -x.dot(eye);
+        te[7] = -y.dot(eye);
+        te[11] = -z.dot(eye);
+        
+        return this;
+      }
+      
+      transformPoint(point) {
+        const e = this.elements;
+        const x = point.x, y = point.y, z = point.z;
+        const w = 1 / (e[3] * x + e[7] * y + e[11] * z + e[15]);
+        
+        const newX = (e[0] * x + e[4] * y + e[8] * z + e[12]) * w;
+        const newY = (e[1] * x + e[5] * y + e[9] * z + e[13]) * w;
+        const newZ = (e[2] * x + e[6] * y + e[10] * z + e[14]) * w;
+        
+        point.x = newX;
+        point.y = newY;
+        point.z = newZ;
+        
+        return point;
+      }
+    }
+
+    // ---- Scene Graph ----
+    class Object3D {
+      constructor() {
+        this.position = new Vector3();
+        this.rotation = new Vector3();
+        this.scale = new Vector3(1, 1, 1);
+        this.matrix = new Matrix4();
+        this.worldMatrix = new Matrix4();
+        this.children = [];
+        this.parent = null;
+        this.visible = true;
+      }
+      
+      add(object) {
+        if (object === this) return;
+        
+        if (object.parent !== null) {
+          object.parent.remove(object);
+        }
+        
+        object.parent = this;
+        this.children.push(object);
+        
+        return this;
+      }
+      
+      remove(object) {
+        const index = this.children.indexOf(object);
+        
+        if (index !== -1) {
+          object.parent = null;
+          this.children.splice(index, 1);
+        }
+        
+        return this;
+      }
+      
+      updateMatrix() {
+        // Create transformation matrices
+        const translation = new Matrix4().makeTranslation(
+          this.position.x, 
+          this.position.y, 
+          this.position.z
+        );
+        
+        const rotationX = new Matrix4().makeRotationX(this.rotation.x);
+        const rotationY = new Matrix4().makeRotationY(this.rotation.y);
+        const rotationZ = new Matrix4().makeRotationZ(this.rotation.z);
+        
+        // Combine transformations: T * Rx * Ry * Rz
+        this.matrix.identity()
+          .multiply(translation)
+          .multiply(rotationY)  // Y first in standard rotation order
+          .multiply(rotationX)  
+          .multiply(rotationZ);
+        
+        return this;
+      }
+      
+      updateWorldMatrix(forceUpdate = false) {
+        if (this.parent === null) {
+          this.updateMatrix();
+          this.worldMatrix.copy(this.matrix);
+        } else {
+          if (forceUpdate) this.updateMatrix();
+          this.worldMatrix.copy(this.parent.worldMatrix).multiply(this.matrix);
+        }
+        
+        // Update children
+        this.children.forEach(child => {
+          child.updateWorldMatrix(forceUpdate);
+        });
+        
+        return this;
+      }
+    }
+
+    // Scene - Root container
+    class Scene extends Object3D {
+      constructor() {
+        super();
+        this.background = '#000000';
+      }
+    }
+
+    // ---- Camera Classes ----
+    class Camera extends Object3D {
+      constructor() {
+        super();
+        this.viewMatrix = new Matrix4();
+        this.projectionMatrix = new Matrix4();
+        this.viewProjectionMatrix = new Matrix4();
+      }
+      
+      // We're no longer using lookAt method in this implementation
+      // as the orbit controller handles the camera orientation directly
+      
+      updateViewMatrix() {
+        // Called by the renderer, but we don't need to do anything
+        // since the OrbitController is handling the view matrix
+        return this;
+      }
+      
+      updateViewProjectionMatrix() {
+        // Combine view and projection matrices
+        this.viewProjectionMatrix.copy(this.projectionMatrix).multiply(this.viewMatrix);
+        return this;
+      }
+    }
+
+    class PerspectiveCamera extends Camera {
+      constructor(fov = 50, aspect = 1, near = 0.1, far = 2000) {
+        super();
+        this.fov = fov;
+        this.aspect = aspect;
+        this.near = near;
+        this.far = far;
+        this.updateProjectionMatrix();
+      }
+      
+      updateProjectionMatrix() {
+        // Convert FOV from degrees to radians
+        const fovRad = this.fov * (Math.PI / 180);
+        
+        // Create the perspective projection matrix
+        this.projectionMatrix.makePerspective(fovRad, this.aspect, this.near, this.far);
+        
+        // Update the combined view-projection matrix
+        if (this.viewMatrix) {
+          this.updateViewProjectionMatrix();
+        }
+        
+        return this;
+      }
+    }
+
+    // ---- Material ----
+    class Material {
+      constructor(color = '#FFFFFF', opacity = 1.0) {
+        this.color = color;
+        this.opacity = opacity;
+        this.wireframe = false;
+      }
+    }
+
+    // ---- Geometry ----
+    class Face {
+      constructor(a, b, c, normal = new Vector3(), material = null) {
+        this.a = a;
+        this.b = b;
+        this.c = c;
+        this.normal = normal;
+        this.material = material;
+        this.depth = 0;
+      }
+      
+      calculateDepth(vertices) {
+        const za = vertices[this.a].z;
+        const zb = vertices[this.b].z;
+        const zc = vertices[this.c].z;
+        // Depth for painter's algorithm sorting
+        this.depth = (za + zb + zc) / 3;
+        return this;
+      }
+    }
+
+    // ---- Cube ----
+    class Cube extends Object3D {
+      constructor(width = 1, height = 1, depth = 1, materials = []) {
+        super();
+        this.width = width;
+        this.height = height;
+        this.depth = depth;
+        
+        // If we have fewer than 6 materials (one for each face), create default materials
+        if (materials.length < 6) {
+          const defaultColors = [
+            '#FF0000', // Right - Red
+            '#00FF00', // Left - Green
+            '#0000FF', // Top - Blue
+            '#FFFF00', // Bottom - Yellow
+            '#FF00FF', // Front - Magenta
+            '#00FFFF'  // Back - Cyan
+          ];
+          
+          // Fill with provided materials, then add defaults as needed
+          this.materials = [...materials];
+          while (this.materials.length < 6) {
+            this.materials.push(new Material(defaultColors[this.materials.length]));
+          }
+        } else {
+          this.materials = materials.slice(0, 6);
+        }
+        
+        this.createGeometry();
+      }
+      
+      createGeometry() {
+        // Define the 8 vertices of the cube
+        const w2 = this.width / 2;
+        const h2 = this.height / 2;
+        const d2 = this.depth / 2;
+        
+        this.vertices = [
+          new Vector3(-w2, -h2, -d2), // 0: left-bottom-back
+          new Vector3(w2, -h2, -d2),  // 1: right-bottom-back
+          new Vector3(w2, h2, -d2),   // 2: right-top-back
+          new Vector3(-w2, h2, -d2),  // 3: left-top-back
+          new Vector3(-w2, -h2, d2),  // 4: left-bottom-front
+          new Vector3(w2, -h2, d2),   // 5: right-bottom-front
+          new Vector3(w2, h2, d2),    // 6: right-top-front
+          new Vector3(-w2, h2, d2)    // 7: left-top-front
+        ];
+        
+        // Define the faces with consistent winding order (counter-clockwise when viewed from outside)
+        this.faces = [
+          // Right face (positive X) - Material 0
+          new Face(1, 2, 6, new Vector3(1, 0, 0), this.materials[0]),
+          new Face(1, 6, 5, new Vector3(1, 0, 0), this.materials[0]),
+          
+          // Left face (negative X) - Material 1
+          new Face(0, 4, 7, new Vector3(-1, 0, 0), this.materials[1]),
+          new Face(0, 7, 3, new Vector3(-1, 0, 0), this.materials[1]),
+          
+          // Top face (positive Y) - Material 2
+          new Face(3, 7, 6, new Vector3(0, 1, 0), this.materials[2]),
+          new Face(3, 6, 2, new Vector3(0, 1, 0), this.materials[2]),
+          
+          // Bottom face (negative Y) - Material 3
+          new Face(0, 1, 5, new Vector3(0, -1, 0), this.materials[3]),
+          new Face(0, 5, 4, new Vector3(0, -1, 0), this.materials[3]),
+          
+          // Front face (positive Z) - Material 4
+          new Face(4, 5, 6, new Vector3(0, 0, 1), this.materials[4]),
+          new Face(4, 6, 7, new Vector3(0, 0, 1), this.materials[4]),
+          
+          // Back face (negative Z) - Material 5
+          new Face(0, 3, 2, new Vector3(0, 0, -1), this.materials[5]),
+          new Face(0, 2, 1, new Vector3(0, 0, -1), this.materials[5])
+        ];
+      }
+    }
+
+    // ---- Orbit Controller ----
+    class OrbitController {
+      constructor(camera, target = new Vector3()) {
+        this.camera = camera;
+        this.target = target.clone();  // Clone to avoid reference issues
+        this.distance = 8;
+        this.phi = Math.PI / 2;     // Vertical angle (0-PI)
+        this.theta = 0;             // Horizontal angle (0-2PI)
+        this.autoRotate = true;
+        this.autoRotateSpeed = 1.5; // Degrees per second
+        this.enabled = true;
+        this.minDistance = 2;
+        this.maxDistance = 20;
+        
+        // Mouse control properties
+        this.isDragging = false;
+        this.prevMouseX = 0;
+        this.prevMouseY = 0;
+        this.mouseRotationSpeed = 0.005; // Sensitivity of mouse movement
+        this.zoomSpeed = 0.1; // Speed of zoom with mouse wheel
+        
+        // Initialize camera position
+        this._updateCameraPosition();
+      }
+      
+      _updateCameraPosition() {
+        // Convert spherical coordinates to Cartesian coordinates
+        const sinPhi = Math.sin(this.phi);
+        const cosPhi = Math.cos(this.phi);
+        const sinTheta = Math.sin(this.theta);
+        const cosTheta = Math.cos(this.theta);
+        
+        // Calculate position in spherical coordinates relative to target
+        this.camera.position.x = this.target.x + this.distance * sinPhi * sinTheta;
+        this.camera.position.y = this.target.y + this.distance * cosPhi;
+        this.camera.position.z = this.target.z + this.distance * sinPhi * cosTheta;
+        
+        // Make camera look at target
+        const lookDir = new Vector3().copy(this.target).sub(this.camera.position).normalize();
+        const right = new Vector3(0, 1, 0).cross(lookDir).normalize();
+        const up = lookDir.clone().cross(right).normalize();
+        
+        // Directly set the camera's view matrix
+        this.camera.viewMatrix.set(
+          right.x, up.x, lookDir.x, 0,
+          right.y, up.y, lookDir.y, 0,
+          right.z, up.z, lookDir.z, 0,
+          -right.dot(this.camera.position), -up.dot(this.camera.position), -lookDir.dot(this.camera.position), 1
+        );
+        
+        // Update the view-projection matrix
+        this.camera.updateViewProjectionMatrix();
+      }
+      
+      enableMouseControls(element) {
+        // Mouse down event - start tracking drag
+        element.addEventListener('mousedown', (e) => {
+          if (e.button === 0) { // Left mouse button
+            this.isDragging = true;
+            this.prevMouseX = e.clientX;
+            this.prevMouseY = e.clientY;
+            this.autoRotate = false; // Disable auto-rotation when user interacts
+            e.preventDefault();
+          }
+        });
+        
+        // Mouse move event - update camera position if dragging
+        element.addEventListener('mousemove', (e) => {
+          if (!this.isDragging) return;
+          
+          const deltaX = e.clientX - this.prevMouseX;
+          const deltaY = e.clientY - this.prevMouseY;
+          
+          // Update theta (horizontal) and phi (vertical) angles
+          this.theta -= deltaX * this.mouseRotationSpeed;
+          this.phi += deltaY * this.mouseRotationSpeed;
+          
+          // Keep theta between 0 and 2*PI
+          this.theta %= (2 * Math.PI);
+          if (this.theta < 0) this.theta += 2 * Math.PI;
+          
+          // Constrain phi to avoid the camera flipping
+          this.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.phi));
+          
+          this._updateCameraPosition();
+          
+          this.prevMouseX = e.clientX;
+          this.prevMouseY = e.clientY;
+          e.preventDefault();
+        });
+        
+        // Mouse up event - stop tracking drag
+        window.addEventListener('mouseup', (e) => {
+          if (e.button === 0) { // Left mouse button
+            this.isDragging = false;
+          }
+        });
+        
+        // Mouse wheel event - zoom in/out
+        element.addEventListener('wheel', (e) => {
+          // Adjust distance based on wheel movement
+          this.distance += e.deltaY * this.zoomSpeed * 0.01;
+          
+          // Constrain distance
+          this.distance = Math.max(this.minDistance, Math.min(this.maxDistance, this.distance));
+          
+          this._updateCameraPosition();
+          e.preventDefault();
+        }, { passive: false });
+        
+        // Add handler to toggle auto-rotation with spacebar
+        window.addEventListener('keydown', (e) => {
+          if (e.code === 'Space') {
+            this.autoRotate = !this.autoRotate;
+            e.preventDefault();
+          }
+        });
+        
+        // Add info text about controls
+        const infoElement = document.getElementById('info');
+        infoElement.innerHTML = '3D SVG Renderer - Mouse: Drag to rotate, Wheel to zoom, Space to toggle auto-rotation';
+      }
+      
+      update(deltaTime = 1/60) {
+        if (!this.enabled) return;
+        
+        if (this.autoRotate && !this.isDragging) {
+          // Convert rotation speed from degrees to radians
+          this.theta += (this.autoRotateSpeed * Math.PI / 180) * deltaTime;
+          
+          // Keep theta between 0 and 2*PI
+          this.theta %= (2 * Math.PI);
+          
+          // Update camera position
+          this._updateCameraPosition();
+        }
+        
+        return this;
+      }
+    }
+
+    // ---- SVG Renderer ----
+    class SVGRenderer {
+      constructor(container, width = 800, height = 600) {
+        this.width = width;
+        this.height = height;
+        this.container = container;
+        this.svg = null;
+        this.sceneGroup = null;
+        this.camera = null;
+        
+        this.initialize();
+      }
+      
+      initialize() {
+        // Create SVG element with namespaces
+        this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        this.svg.setAttribute('width', this.width);
+        this.svg.setAttribute('height', this.height);
+        this.svg.setAttribute('viewBox', `0 0 ${this.width} ${this.height}`);
+        this.svg.style.backgroundColor = '#111';
+        
+        // Create a group for the scene
+        this.sceneGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        this.svg.appendChild(this.sceneGroup);
+        
+        // Add SVG to container
+        this.container.appendChild(this.svg);
+      }
+      
+      setSize(width, height) {
+        this.width = width;
+        this.height = height;
+        
+        this.svg.setAttribute('width', width);
+        this.svg.setAttribute('height', height);
+        this.svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        
+        // Update camera aspect ratio if it exists
+        if (this.camera instanceof PerspectiveCamera) {
+          this.camera.aspect = width / height;
+          this.camera.updateProjectionMatrix();
+        }
+        
+        return this;
+      }
+      
+      render(scene, camera) {
+        this.camera = camera;
+        
+        // Clear previous rendering
+        while (this.sceneGroup.firstChild) {
+          this.sceneGroup.removeChild(this.sceneGroup.firstChild);
+        }
+        
+        // Update camera matrices
+        camera.updateMatrix();
+        camera.updateWorldMatrix();
+        camera.updateViewMatrix();
+        camera.updateViewProjectionMatrix();
+        
+        // Process the scene graph
+        this.processObject(scene, camera);
+      }
+      
+      processObject(object, camera) {
+        if (!object.visible) return;
+        
+        // Update object's matrix
+        object.updateMatrix();
+        object.updateWorldMatrix();
+        
+        // If it's a Cube, render it
+        if (object instanceof Cube) {
+          this.renderCube(object, camera);
+        }
+        
+        // Process children
+        object.children.forEach(child => {
+          this.processObject(child, camera);
+        });
+      }
+      
+      // Project a vertex from 3D to 2D screen space
+      projectVertex(vertex, object, camera, storeViewZ = false) {
+        // Clone vertex to avoid modifying original
+        const v = vertex.clone();
+        
+        // Transform to world space (Object Space -> World Space)
+        object.worldMatrix.transformPoint(v);
+        
+        // Store world position for possible use
+        const worldPos = v.clone();
+        
+        // Transform to view space (World Space -> View Space)
+        camera.viewMatrix.transformPoint(v);
+        
+        // Store view space Z if needed
+        const viewZ = v.z;
+        
+        // Create combined view-projection matrix and transform point
+        // This handles: (View Space -> Clip Space -> NDC)
+        const viewProjectionMatrix = new Matrix4().copy(camera.projectionMatrix).multiply(camera.viewMatrix);
+        
+        // We need to do the perspective division manually to get correct results
+        const clipSpacePos = object.worldMatrix.transformPoint(vertex.clone());
+        camera.viewMatrix.transformPoint(clipSpacePos);
+        camera.projectionMatrix.transformPoint(clipSpacePos);
+        
+        // Perspective division to get NDC coordinates
+        if (clipSpacePos.z !== 0) {
+          clipSpacePos.x /= Math.abs(clipSpacePos.z);
+          clipSpacePos.y /= Math.abs(clipSpacePos.z);
+        }
+        
+        // Convert from NDC to screen coordinates
+        const screenX = (clipSpacePos.x + 1) * 0.5 * this.width;
+        const screenY = (-clipSpacePos.y + 1) * 0.5 * this.height; // Y is flipped in screen space
+        
+        return {
+          x: screenX,
+          y: screenY,
+          z: viewZ,
+          worldPos: worldPos
+        };
+      }
+      
+      renderCube(cube, camera) {
+        // Project all vertices
+        const projectedVertices = [];
+        
+        for (let i = 0; i < cube.vertices.length; i++) {
+          projectedVertices.push(this.projectVertex(cube.vertices[i], cube, camera, true));
+        }
+        
+        // Create faces with projected vertices
+        const renderableFaces = [];
+        
+        cube.faces.forEach(face => {
+          // Get the projected vertices for this face
+          const va = projectedVertices[face.a];
+          const vb = projectedVertices[face.b];
+          const vc = projectedVertices[face.c];
+          
+          // Calculate face normal in view space for backface culling
+          // We can use cross product of two edges of the triangle
+          const edge1 = new Vector3(
+            vb.worldPos.x - va.worldPos.x,
+            vb.worldPos.y - va.worldPos.y,
+            vb.worldPos.z - va.worldPos.z
+          );
+          
+          const edge2 = new Vector3(
+            vc.worldPos.x - va.worldPos.x,
+            vc.worldPos.y - va.worldPos.y,
+            vc.worldPos.z - va.worldPos.z
+          );
+          
+          const normal = new Vector3().copy(edge1).cross(edge2);
+          
+          // Get vector from any point on the face to the camera
+          const viewVector = new Vector3(
+            camera.position.x - va.worldPos.x,
+            camera.position.y - va.worldPos.y,
+            camera.position.z - va.worldPos.z
+          );
+          
+          // Dot product - if positive, face is visible to camera
+          const dot = normal.dot(viewVector);
+          
+          // Only render faces facing the camera (dot product of normal and view vector is positive)
+          if (dot > 0) {
+            // Calculate depth (average z value in view space for sorting)
+            const depth = (va.z + vb.z + vc.z) / 3;
+            
+            renderableFaces.push({
+              points: [va, vb, vc],
+              depth: depth,
+              material: face.material
+            });
+          }
+        });
+        
+        // Sort faces by depth (furthest first) - Painter's algorithm
+        renderableFaces.sort((a, b) => b.depth - a.depth);
+        
+        // Render faces back-to-front
+        renderableFaces.forEach(face => {
+          const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+          
+          // Set points attribute
+          const pointsAttr = face.points.map(p => `${p.x},${p.y}`).join(' ');
+          polygon.setAttribute('points', pointsAttr);
+          
+          // Apply material
+          polygon.setAttribute('fill', face.material.color);
+          polygon.setAttribute('stroke', '#000');
+          polygon.setAttribute('stroke-width', '1');
+          polygon.setAttribute('fill-opacity', face.material.opacity.toString());
+          
+          this.sceneGroup.appendChild(polygon);
+        });
+      }
+    }
+
+    // ---- Animation Loop ----
+    class Animation {
+      constructor(renderer, scene, camera, controllers = []) {
+        this.renderer = renderer;
+        this.scene = scene;
+        this.camera = camera;
+        this.controllers = controllers;
+        this.running = false;
+        this.lastTime = 0;
+        
+        // Bind the animate method to this instance to prevent context loss
+        this.animate = this.animate.bind(this);
+      }
+      
+      start() {
+        this.running = true;
+        this.lastTime = performance.now();
+        requestAnimationFrame(this.animate);
+        return this;
+      }
+      
+      stop() {
+        this.running = false;
+        return this;
+      }
+      
+      animate(time) {
+        if (!this.running) return;
+        
+        // Calculate delta time with a maximum to prevent large jumps
+        const now = performance.now();
+        const deltaTime = Math.min((now - this.lastTime) / 1000, 0.1); // Convert to seconds, cap at 0.1s
+        this.lastTime = now;
+        
+        // Update orbit controllers and other controllers
+        this.controllers.forEach(controller => {
+          controller.update(deltaTime);
+        });
+        
+        // Render the scene - we don't need additional matrix updates
+        // since the OrbitController already handles that
+        this.renderer.render(this.scene, this.camera);
+        
+        // Request next frame
+        requestAnimationFrame(this.animate);
+      }
+    }
+
+    // ---- Main Application ----
+    class App {
+      constructor(container) {
+        this.container = container;
+        this.width = container.clientWidth;
+        this.height = container.clientHeight;
+        
+        this.scene = new Scene();
+        this.camera = new PerspectiveCamera(45, this.width / this.height, 0.1, 1000);
+        this.renderer = new SVGRenderer(container, this.width, this.height);
+        
+        this.initialize();
+      }
+      
+      initialize() {
+        // Create a cube with different colored faces
+        const cube = new Cube(2, 2, 2);
+        this.scene.add(cube);
+        
+        // Set camera properties
+        this.camera.near = 0.1;
+        this.camera.far = 100;
+        this.camera.updateProjectionMatrix();
+        
+        // Create orbit controller with a specific target at the origin
+        const target = new Vector3(0, 0, 0);
+        this.orbitController = new OrbitController(this.camera, target);
+        this.orbitController.distance = 8;
+        this.orbitController.autoRotateSpeed = 1.5;  // Increased rotation speed
+        
+        // Enable mouse controls on the container element
+        this.orbitController.enableMouseControls(this.container);
+        
+        // Set up animation loop
+        this.animation = new Animation(
+          this.renderer, 
+          this.scene, 
+          this.camera, 
+          [this.orbitController]
+        );
+        
+        // Handle resize
+        window.addEventListener('resize', this.onResize.bind(this));
+        
+        // Start animation
+        this.animation.start();
+      }
+      
+      onResize() {
+        const width = this.container.clientWidth;
+        const height = this.container.clientHeight;
+        
+        this.renderer.setSize(width, height);
+        this.camera.aspect = width / height;
+        this.camera.updateProjectionMatrix();
+      }
+    }
+
+    // Initialize the application when DOM is loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      const container = document.getElementById('container');
+      const app = new App(container);
+    });
+    
+    // Initialize immediately if DOM is already loaded
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      const container = document.getElementById('container');
+      const app = new App(container);
+    }
+  </script>
+</body>
+</html>

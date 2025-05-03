@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Direct Camera Control - SVG 3D Renderer</title>
+  <link rel="stylesheet" href="index.css"/>
+</head>
+<body>
+  <div id="container"></div>
+  <div id="info" class="info-label">Direct Camera Control - Use controls to position camera</div>
+  <div id="stats" class="info-label">FPS: 0 | Meshes: 0 | Faces: 0</div>
+  
+  <!-- Advanced Stats Panel -->
+  <div id="advanced-stats" class="info-label stats-panel">
+    <div class="stats-header">Rendering Statistics</div>
+    <div class="stats-row">
+      <span class="stats-label">Frame Rate:</span>
+      <span id="stats-fps" class="stats-value">0 FPS</span>
+    </div>
+    <div class="stats-row">
+      <span class="stats-label">Objects:</span>
+      <span id="stats-objects" class="stats-value">0 meshes</span>
+    </div>
+    <div class="stats-row">
+      <span class="stats-label">Faces:</span>
+      <span id="stats-faces" class="stats-value">0 triangles</span>
+    </div>
+    <div class="stats-row">
+      <span class="stats-label">Culled Faces:</span>
+      <span id="stats-culled" class="stats-value">0</span>
+    </div>
+    <div class="stats-row">
+      <span class="stats-label">Intersections:</span>
+      <span id="stats-intersections" class="stats-value">0</span>
+    </div>
+    <div class="stats-row">
+      <span class="stats-label">Render Time:</span>
+      <span id="stats-render-time" class="stats-value">0 ms</span>
+    </div>
+  </div>
+  
+  <!-- Control panels wrapper -->
+  <div id="controls-wrapper">
+    <!-- Rendering Controls Panel -->
+    <div id="rendering-controls" class="control-panel">
+      <h3>Rendering Controls</h3>
+      <div class="control-group">
+        <label for="render-mode">Render Mode:</label>
+        <select id="render-mode">
+          <option value="normal">Normal</option>
+          <option value="depth">Depth</option>
+          <option value="color-depth">Color Depth</option>
+          <option value="wireframe">Wireframe</option>
+          <option value="solid">Solid</option>
+        </select>
+      </div>
+      
+      <div class="toggle-section">
+        <div class="toggle-header">Visibility Options</div>
+        <div class="control-group">
+          <div class="checkbox-container">
+            <input type="checkbox" id="wireframe-toggle" checked>
+            <label for="wireframe-toggle">Show Wireframe</label>
+          </div>
+          <div class="checkbox-container">
+            <input type="checkbox" id="backface-culling" checked>
+            <label for="backface-culling">Backface Culling</label>
+          </div>
+        </div>
+      </div>
+      
+      <div class="toggle-section">
+        <div class="toggle-header">Intersection Options</div>
+        <div class="control-group">
+          <div class="checkbox-container">
+            <input type="checkbox" id="intersection-toggle" checked>
+            <label for="intersection-toggle">Handle Intersections</label>
+          </div>
+          <div class="checkbox-container">
+            <input type="checkbox" id="intersection-lines-toggle" checked>
+            <label for="intersection-lines-toggle">Show Intersection Lines</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label for="depth-threshold">Depth Threshold:</label>
+        <input type="range" id="depth-threshold" min="0.01" max="0.5" value="0.05" step="0.01">
+        <span id="depth-threshold-value">0.05</span>
+      </div>
+    </div>
+    
+    <!-- Scene Outliner Panel -->
+    <div id="scene-outliner" class="control-panel">
+      <h3>Scene Outliner</h3>
+      <div class="outliner-header">
+        <span class="outliner-column type-column">Type</span>
+        <span class="outliner-column name-column">Name</span>
+        <span class="outliner-column vis-column">Vis</span>
+      </div>
+      <div class="outliner-tree">
+        <!-- Will be populated dynamically -->
+        <div id="outliner-content">
+          <!-- Example structure (will be replaced by JavaScript) -->
+          <div class="tree-item">
+            <div class="tree-item-content">
+              <span class="toggle-icon">▶</span>
+              <span class="item-type">Scene</span>
+              <span class="item-name">Root</span>
+              <span class="item-visibility">👁️</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="outliner-footer">
+        <button id="focus-selected">Focus Selected</button>
+        <button id="refresh-outliner">Refresh</button>
+      </div>
+    </div>
+    
+    <!-- Camera Controls Panel -->
+    <div id="camera-controls" class="control-panel">
+      <h3>Camera Controls</h3>
+      <div class="control-group">
+        <label for="target-select">Target Object:</label>
+        <select id="target-select">
+          <option value="scene-center">Scene Center</option>
+          <!-- Will be populated with scene objects dynamically -->
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="distance-slider">Distance:</label>
+        <input type="range" id="distance-slider" min="2" max="20" value="10" step="0.1">
+        <span id="distance-value">10</span>
+      </div>
+      <div class="control-group">
+        <label for="phi-slider">Vertical Angle (Phi):</label>
+        <input type="range" id="phi-slider" min="0.1" max="3.04" value="1.57" step="0.01">
+        <span id="phi-value">90°</span>
+      </div>
+      <div class="control-group">
+        <label for="theta-slider">Horizontal Angle (Theta):</label>
+        <input type="range" id="theta-slider" min="0" max="6.28" value="0" step="0.01">
+        <span id="theta-value">0°</span>
+      </div>
+      <div class="control-group">
+        <label for="mode-select">Projection Mode:</label>
+        <select id="mode-select">
+          <option value="perspective">Perspective</option>
+          <option value="orthographic">Orthographic</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <button id="btn-front">Front</button>
+        <button id="btn-top">Top</button>
+        <button id="btn-right">Right</button>
+        <button id="btn-custom">Custom</button>
+      </div>
+      <div class="control-info">
+        <p>Mouse Controls: Middle button to orbit, Scroll to zoom</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load the renderer library first since app.js depends on it -->
+  <script src="../../svg3d.js"></script>
+  <script src="../../shapes3d.js"></script>
+  <script src="../../controls3d.js"></script>
+  <!-- Load the application logic -->
+  <script src="app.js"></script>
+</body>
+</html> 

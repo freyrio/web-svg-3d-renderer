@@ -1,0 +1,17 @@
+{
+  "name": "svg3d-project",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "SVG3D",
+    "Editor"
+  ],
+  "scripts": {
+    "dev:lib": "cd SVG3D && npm run dev",
+    "dev:editor": "cd Editor && npm run dev",
+    "build:lib": "cd SVG3D && npm run build",
+    "build:editor": "cd Editor && npm run build",
+    "build": "npm run build:lib && npm run build:editor",
+    "preview:editor": "cd Editor && npm run preview"
+  }
+} 
