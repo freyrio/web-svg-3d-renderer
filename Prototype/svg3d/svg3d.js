@@ -2412,13 +2412,36 @@ class Vector3 {
       this.normalIndex = [a, b, c];
     }
     
-    calculateDepth(vertices) {
-      const za = vertices[this.a].z;
-      const zb = vertices[this.b].z;
-      const zc = vertices[this.c].z;
-      // Depth for painter's algorithm sorting
-      this.depth = (za + zb + zc) / 3;
+    calculateDepth(vertices, cameraPosition) {
+      // Calculate distance from each vertex to camera
+      const va = vertices[this.a];
+      const vb = vertices[this.b];
+      const vc = vertices[this.c];
+      
+      const da = this.calculatePointDistance(va, cameraPosition);
+      const db = this.calculatePointDistance(vb, cameraPosition);
+      const dc = this.calculatePointDistance(vc, cameraPosition);
+      
+      // Use minimum distance for more accurate depth sorting
+      this.depth = Math.min(da, db, dc);
+      
+      // Apply a small bias based on material properties or object ID to ensure
+      // consistent sorting of adjacent faces
+      if (this.material) {
+        // Add small epsilon based on material ID or index to enforce consistent ordering
+        const materialBias = this.material.id || 0;
+        this.depth += (materialBias % 1000) * 0.0000001;
+      }
+      
       return this;
+    }
+    
+    // Helper to calculate distance between two points
+    calculatePointDistance(point, cameraPosition) {
+      const dx = point.x - cameraPosition.x;
+      const dy = point.y - cameraPosition.y;
+      const dz = point.z - cameraPosition.z;
+      return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
     
     // Set UV indices explicitly
@@ -3313,34 +3336,25 @@ class Vector3 {
         
         const normal = new Vector3().copy(edge1).cross(edge2).normalize();
         
-        // Calculate view direction from face to camera
+        // Calculate face center
         const center = new Vector3(
           (va.worldPos.x + vb.worldPos.x + vc.worldPos.x) / 3,
           (va.worldPos.y + vb.worldPos.y + vc.worldPos.y) / 3,
           (va.worldPos.z + vb.worldPos.z + vc.worldPos.z) / 3
         );
         
-        const viewDirection = new Vector3(
-          camera.position.x - center.x,
-          camera.position.y - center.y,
-          camera.position.z - center.z
-        ).normalize();
+        // Prepare face object for backface culling check
+        const faceForCulling = {
+          normal: normal,
+          worldVertices: [va.worldPos, vb.worldPos, vc.worldPos]
+        };
         
-        // Dot product - if positive, face is visible to camera
-        const dot = normal.dot(viewDirection);
-        
-        // Use a small epsilon value to prevent faces from disappearing when almost perpendicular
-        // This allows faces that are very slightly facing away to still be rendered
-        const BACKFACE_CULLING_EPSILON = this.backfaceCullingEnabled ? -0.01 : -0.05; // Tighter tolerance when enabled
-        
-        // Special handling for very thin objects (like planes)
-        const isVeryThin = Math.abs(normal.dot(viewDirection)) < 0.1;
-        
-        // Check if this is a plane mesh
+        // Check if this is a plane mesh (special case handling)
         const isPlane = mesh.geometry.vertices.every(v => Math.abs(v.z) < 0.001);
         
-        // Only collect faces facing the camera or almost perpendicular
-        if (dot > BACKFACE_CULLING_EPSILON || (isVeryThin && isPlane)) {
+        // Only collect faces facing the camera using the adaptive backface culling method
+        // Special handling for plane meshes to avoid culling them
+        if (!this.isBackFacing(faceForCulling, camera.position) || isPlane) {
           // Calculate the distance from camera to each vertex and take the minimum
           // This ensures that the closest point of the face is used for depth sorting
           const d1 = this.calculatePointDistance(va.worldPos, camera.position);
@@ -3478,8 +3492,10 @@ class Vector3 {
           if (faceA.objectId === faceB.objectId) continue;
           
           // Early rejection test - if the depth difference is large, they can't intersect
-          // This now uses the closest point from each face for a more accurate test
-          if (Math.abs(faceA.depth - faceB.depth) > this.intersectionThreshold) continue;
+          // Use adaptive threshold based on scene scale
+          const adaptiveThreshold = this.calculateAdaptiveThreshold(faceA, faceB);
+          
+          if (Math.abs(faceA.depth - faceB.depth) > adaptiveThreshold) continue;
           
           // Check if triangles potentially intersect using a more accurate method
           // that considers the actual 3D geometry rather than just depth
@@ -3555,6 +3571,27 @@ class Vector3 {
           });
         }
       });
+    }
+    
+    // NEW: Calculate adaptive intersection threshold based on scene scale
+    calculateAdaptiveThreshold(faceA, faceB) {
+      // Calculate average distance between faces and camera
+      const avgDepth = (faceA.depth + faceB.depth) / 2;
+      
+      // Calculate approximate scene size based on min/max UV coordinates
+      const sceneSize = Math.max(
+        this.maxUV.x - this.minUV.x,
+        this.maxUV.y - this.minUV.y,
+        this.maxUV.z - this.minUV.z
+      );
+      
+      // Base threshold on scene size (0.1% of scene size)
+      const baseThreshold = sceneSize * 0.001;
+      
+      // Scale threshold based on camera distance
+      const cameraDistanceScale = Math.max(0.1, Math.min(1, avgDepth / 100));
+      
+      return baseThreshold * cameraDistanceScale;
     }
     
     // Process subdivided faces from intersection
@@ -4179,6 +4216,51 @@ class Vector3 {
     // Get backface culling state
     getBackfaceCullingState() {
       return this.backfaceCullingEnabled;
+    }
+    
+    // Adaptive backface culling
+    isBackFacing(face, cameraPosition) {
+      // Calculate face normal in world space
+      const worldNormal = face.normal ? face.normal.clone() : 
+                          this.calculateFaceNormal(face.worldVertices || face.points.map(p => p.worldPos));
+      
+      // Calculate face center
+      let faceCenter;
+      if (face.worldVertices) {
+        // Use average of world vertices
+        faceCenter = new Vector3(
+          (face.worldVertices[0].x + face.worldVertices[1].x + face.worldVertices[2].x) / 3,
+          (face.worldVertices[0].y + face.worldVertices[1].y + face.worldVertices[2].y) / 3,
+          (face.worldVertices[0].z + face.worldVertices[1].z + face.worldVertices[2].z) / 3
+        );
+      } else if (face.points && face.points[0].worldPos) {
+        // Use average of screen points with world positions
+        faceCenter = new Vector3(
+          (face.points[0].worldPos.x + face.points[1].worldPos.x + face.points[2].worldPos.x) / 3,
+          (face.points[0].worldPos.y + face.points[1].worldPos.y + face.points[2].worldPos.y) / 3,
+          (face.points[0].worldPos.z + face.points[1].worldPos.z + face.points[2].worldPos.z) / 3
+        );
+      } else {
+        // Fallback to a default value
+        faceCenter = new Vector3(0, 0, 0);
+      }
+      
+      // Calculate view direction from face to camera
+      const viewDirection = new Vector3()
+        .copy(cameraPosition)
+        .sub(faceCenter)
+        .normalize();
+      
+      // Dot product - if negative or very small, face is back-facing
+      const dot = worldNormal.dot(viewDirection);
+      
+      // Calculate adaptive epsilon based on camera distance
+      const cameraDistance = this.calculatePointDistance(cameraPosition, faceCenter);
+      const epsilon = this.backfaceCullingEnabled 
+        ? -0.01 * Math.min(1, cameraDistance / 100) 
+        : -0.05;
+      
+      return dot <= epsilon;
     }
   }
 
