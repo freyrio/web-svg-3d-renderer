@@ -36,31 +36,90 @@ function createCubes() {
       const color = colors[colorIndex % colors.length];
       
       // Create a cube with a single material
-      const cube = new Cube(1, 1, 1, [new Material(color)]);
+      const material = new Material(color);
+      const cube = Mesh.createBox(1, 1, 1, material);
       cube.position.set(x, 0, z);
       // Add a name property for identification
-      cube.name = `Cube ${++cubeIndex} (${x},0,${z})`;
+      cube.setName(`Cube ${++cubeIndex} (${x},0,${z})`);
       scene.add(cube);
     }
   }
   
-  // Add a larger central cube with semi-transparent white material
-  const centerMaterial = new Material('#ffffff');
-  centerMaterial.setOpacity(0.7);
-  const centerCube = new Cube(0.8, 0.8, 0.8, [centerMaterial]);
-  centerCube.position.set(0, 1.5, 0);
-  centerCube.name = 'Center Cube (0,1.5,0)';
-  scene.add(centerCube);
+  // Add a larger central cube with textured material
+  // First create a texture
+  const texturePath = '../../assets/textures/Wood_Crate_001_basecolor.jpg';
   
-  // Add a floor plane
-  const floor = new Plane(10, 10);
-  // Rotate 180 degrees (PI radians) around X-axis to flip normals upward
-  floor.rotation.x = Math.PI;
-  // Place the floor at y=-0.5 (at the bottom of the cubes)
-  floor.position.y = 0.6;
-  floor.material.setColor('#555555');
-  floor.name = 'Floor';
-  scene.add(floor);
+  // Try to preload the image directly to verify it loads
+  const preloadImg = new Image();
+  preloadImg.onload = () => {
+    console.log('Image preloaded successfully:', preloadImg.src);
+    console.log('Image dimensions:', preloadImg.width, 'x', preloadImg.height);
+  };
+  preloadImg.onerror = (err) => {
+    console.error('Failed to preload image:', preloadImg.src, err);
+  };
+  preloadImg.src = texturePath;
+  
+  // Now create the texture for the renderer
+  const crateTexture = Texture.fromURL(texturePath, 
+    // On load callback
+    (texture) => {
+      console.log('Crate texture loaded successfully', texture);
+      console.log('Image dimensions:', texture.image.width, 'x', texture.image.height);
+      console.log('Loaded state:', texture.loaded);
+      console.log('Texture object details:', 
+        'URL:', texture.url, 
+        'Image loaded:', !!texture.image,
+        'Image complete:', texture.image ? texture.image.complete : false
+      );
+      
+      // Force a complete re-render when texture loads
+      setTimeout(() => {
+        console.log('Forcing re-render after texture load');
+        renderer.render(scene, camera);
+      }, 100);
+    },
+    // On error callback
+    (err) => {
+      console.error('Failed to load crate texture:', err);
+    }
+  );
+  
+  // Create a material using the texture we just created
+  const centerMaterial = new Material({
+    color: '#FF0000', // Use a bright red color as fallback to make it obvious if texture isn't applied
+    opacity: 1.0,     // Use full opacity
+    shading: 'flat'   // Use flat shading instead of phong to simplify rendering
+  });
+  
+  // Set the texture map on the material and log additional details
+  centerMaterial.setMap(crateTexture);
+  console.log('Material with texture:', centerMaterial);
+  
+  // Create cube with explicit textures on each face
+  const geometry = Geometry.createBox(0.8, 0.8, 0.8);
+  
+  // Create 6 identical materials with the texture for each face
+  const materials = [];
+  for (let i = 0; i < 6; i++) {
+    const faceMaterial = new Material({
+      color: '#FF0000',
+      opacity: 1.0,
+      shading: 'flat'
+    });
+    faceMaterial.setMap(crateTexture);
+    materials.push(faceMaterial);
+  }
+  
+  // Create a textured cube with the materials array
+  const centerCube = new Mesh(geometry, materials);
+  centerCube.position.set(0, 1.5, 0);
+  centerCube.setName('Textured Crate (0,1.5,0)');
+  
+  // Ensure all faces have materials by updating face materials
+  centerCube.updateFaceMaterials();
+  
+  scene.add(centerCube);
   
   // Populate target selector dropdown
   populateTargetSelector();
@@ -402,9 +461,9 @@ function updateStats() {
     let faceCount = 0;
     
     function countObjects(object) {
-      if (object.faces) {
+      if (object.type === 'Mesh' && object.geometry && object.geometry.faces) {
         meshCount++;
-        faceCount += object.faces.length;
+        faceCount += object.geometry.faces.length;
       }
       
       if (object.children) {
@@ -514,6 +573,9 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Start the auto-rotation
   autoRotate();
+  
+  // Test SVG patterns directly
+  testSVGPatterns();
 });
 
 // To avoid having to manually animate in this example, let's add a simple automatic rotation
@@ -684,20 +746,25 @@ function buildSceneTree(sceneNode, parentElement) {
         return;
       }
       
-      // Determine the type of the object
-      let type = 'Object';
+      // Determine the type of the object based on its type property
+      let type = child.type || 'Object';
       
-      // Use constructor name as a more reliable way to check object type
-      const constructorName = child.constructor.name;
-      
-      if (constructorName === 'Cube') {
-        type = 'Cube';
-      } else if (constructorName === 'Plane') {
-        type = 'Plane';
-      } else if (constructorName === 'Sphere') {
-        type = 'Sphere';
-      } else if (child.children && child.children.length > 0) {
-        type = 'Group';
+      // For meshes, use a more specific label based on geometry
+      if (child.type === 'Mesh' && child.geometry) {
+        if (child.geometry.boundingBox) {
+          const bbox = child.geometry.boundingBox;
+          const w = bbox.max.x - bbox.min.x;
+          const h = bbox.max.y - bbox.min.y;
+          const d = bbox.max.z - bbox.min.z;
+          
+          if (Math.abs(w - h) < 0.01 && Math.abs(w - d) < 0.01) {
+            type = 'Box';
+          } else if (Math.abs(d) < 0.01) {
+            type = 'Plane';
+          } else if (child.geometry.vertices.length > 20) {
+            type = 'Sphere'; // Rough heuristic for spheres
+          }
+        }
       }
       
       // Get the name (use the object's name property if available, otherwise use a generic name)
@@ -824,4 +891,114 @@ function focusSelectedObject() {
 // Refresh the outliner
 function refreshOutliner() {
   initSceneOutliner();
+}
+
+// Function to test if SVG patterns work at all
+function testSVGPatterns() {
+  console.log('Running direct SVG pattern test');
+  
+  // Create a test SVG
+  const testSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  testSvg.setAttribute('width', '200');
+  testSvg.setAttribute('height', '200');
+  testSvg.style.position = 'absolute';
+  testSvg.style.bottom = '10px';
+  testSvg.style.right = '10px';
+  testSvg.style.border = '1px solid white';
+  testSvg.style.zIndex = '1000';
+  
+  // Create defs and pattern
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+  pattern.setAttribute('id', 'test-pattern');
+  pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+  pattern.setAttribute('width', '50');
+  pattern.setAttribute('height', '50');
+  
+  // Create a simple pattern with a red rectangle
+  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  rect.setAttribute('x', '0');
+  rect.setAttribute('y', '0');
+  rect.setAttribute('width', '25');
+  rect.setAttribute('height', '25');
+  rect.setAttribute('fill', 'red');
+  
+  // Create another rectangle for the pattern
+  const rect2 = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  rect2.setAttribute('x', '25');
+  rect2.setAttribute('y', '25');
+  rect2.setAttribute('width', '25');
+  rect2.setAttribute('height', '25');
+  rect2.setAttribute('fill', 'blue');
+  
+  // Add items to pattern
+  pattern.appendChild(rect);
+  pattern.appendChild(rect2);
+  defs.appendChild(pattern);
+  testSvg.appendChild(defs);
+  
+  // Create a rectangle that uses the pattern
+  const testRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  testRect.setAttribute('x', '10');
+  testRect.setAttribute('y', '10');
+  testRect.setAttribute('width', '180');
+  testRect.setAttribute('height', '180');
+  testRect.setAttribute('fill', 'url(#test-pattern)');
+  testSvg.appendChild(testRect);
+  
+  // Add the test SVG to the document
+  document.body.appendChild(testSvg);
+  
+  // Now try creating a test pattern using the texture image
+  setTimeout(() => {
+    const texturePath = '../../assets/textures/Wood_Crate_001_basecolor.jpg';
+    const testImg = new Image();
+    testImg.onload = () => {
+      console.log('Creating image pattern test');
+      
+      // Create a new test SVG
+      const imgTestSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      imgTestSvg.setAttribute('width', '200');
+      imgTestSvg.setAttribute('height', '200');
+      imgTestSvg.style.position = 'absolute';
+      imgTestSvg.style.bottom = '10px';
+      imgTestSvg.style.left = '10px';
+      imgTestSvg.style.border = '1px solid white';
+      imgTestSvg.style.zIndex = '1000';
+      
+      // Create defs and pattern
+      const imgDefs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      const imgPattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+      imgPattern.setAttribute('id', 'test-img-pattern');
+      imgPattern.setAttribute('patternUnits', 'userSpaceOnUse');
+      imgPattern.setAttribute('width', testImg.width);
+      imgPattern.setAttribute('height', testImg.height);
+      
+      // Create an image element for the pattern
+      const svgImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+      svgImg.setAttribute('href', texturePath);
+      svgImg.setAttribute('x', '0');
+      svgImg.setAttribute('y', '0');
+      svgImg.setAttribute('width', testImg.width);
+      svgImg.setAttribute('height', testImg.height);
+      
+      // Add items to pattern
+      imgPattern.appendChild(svgImg);
+      imgDefs.appendChild(imgPattern);
+      imgTestSvg.appendChild(imgDefs);
+      
+      // Create a rectangle that uses the pattern
+      const imgTestRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      imgTestRect.setAttribute('x', '10');
+      imgTestRect.setAttribute('y', '10');
+      imgTestRect.setAttribute('width', '180');
+      imgTestRect.setAttribute('height', '180');
+      imgTestRect.setAttribute('fill', 'url(#test-img-pattern)');
+      imgTestSvg.appendChild(imgTestRect);
+      
+      // Add the test SVG to the document
+      document.body.appendChild(imgTestSvg);
+    };
+    testImg.src = texturePath;
+  }, 1000);
 } 

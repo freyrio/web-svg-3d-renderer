@@ -1,0 +1,231 @@
+/* Styles for the Texture Mapping Visualization Example */
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f0f0f0;
+  color: #333;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* Main application container */
+.app-container {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 10px;
+  padding: 10px;
+  height: 100vh;
+  max-height: 100vh;
+}
+
+/* Panel styling */
+.view-panel, .control-panel {
+  background-color: #fff;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-header {
+  background-color: #4a5568;
+  color: white;
+  padding: 8px 10px;
+  font-weight: bold;
+  font-size: 14px;
+  height: 36px;
+  z-index: 10; /* Ensure header is above content */
+}
+
+.panel-content {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+
+/* Panel layout */
+#view3d-container {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+#uv-container {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+#texture-controls {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+/* 3D View Panel */
+#view3d-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #333; /* Match the SVG background color */
+}
+
+#view3d-content svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* UV Map Visualization */
+#uv-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background-color: #222;
+  overflow: hidden;
+}
+
+#uv-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+}
+
+.texture-display {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.5;
+  object-fit: cover;
+  z-index: 1;
+}
+
+/* Controls Panel */
+.control-group {
+  margin: 8px 12px;
+}
+
+.control-group label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: bold;
+  color: #4a5568;
+}
+
+.control-group input[type="range"] {
+  width: 80%;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.control-group select {
+  width: 100%;
+  padding: 4px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+/* Debug Panel */
+#debug-panel {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  width: 300px;
+  max-height: 300px;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  z-index: 100;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+#debug-panel .panel-header {
+  background-color: rgba(0, 0, 0, 0.9);
+}
+
+#debug-info {
+  padding: 10px;
+  font-family: monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  max-height: 150px;
+  overflow: auto;
+}
+
+#stats {
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  font-family: monospace;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.debug-buttons {
+  display: flex;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.debug-buttons button {
+  flex: 1;
+  padding: 4px 0;
+  background-color: #718096;
+  border: none;
+  border-radius: 3px;
+  color: white;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.debug-buttons button:hover {
+  background-color: #4a5568;
+}
+
+.debug-buttons button.active {
+  background-color: #38a169;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .app-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(3, 1fr);
+  }
+  
+  #view3d-container {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  
+  #uv-container {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  
+  #texture-controls {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  
+  #debug-panel {
+    width: calc(100% - 40px);
+    left: 20px;
+    bottom: auto;
+    top: 20px;
+  }
+} 

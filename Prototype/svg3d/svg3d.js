@@ -77,6 +77,67 @@ class Vector3 {
     }
   }
 
+  class Vector2 {
+    constructor(x = 0, y = 0) {
+      this.x = x;
+      this.y = y;
+    }
+    
+    set(x, y) {
+      this.x = x;
+      this.y = y;
+      return this;
+    }
+    
+    copy(v) {
+      this.x = v.x;
+      this.y = v.y;
+      return this;
+    }
+    
+    clone() {
+      return new Vector2(this.x, this.y);
+    }
+    
+    add(v) {
+      this.x += v.x;
+      this.y += v.y;
+      return this;
+    }
+    
+    sub(v) {
+      this.x -= v.x;
+      this.y -= v.y;
+      return this;
+    }
+    
+    multiplyScalar(s) {
+      this.x *= s;
+      this.y *= s;
+      return this;
+    }
+    
+    divideScalar(s) {
+      if (s !== 0) {
+        this.x /= s;
+        this.y /= s;
+      }
+      return this;
+    }
+    
+    length() {
+      return Math.sqrt(this.x * this.x + this.y * this.y);
+    }
+    
+    normalize() {
+      return this.divideScalar(this.length() || 1);
+    }
+    
+    dot(v) {
+      return this.x * v.x + this.y * v.y;
+    }
+  }
+
   class Matrix4 {
     constructor() {
       // Elements stored in column-major order to match WebGL/OpenGL convention
@@ -681,6 +742,8 @@ class Vector3 {
       this.children = [];
       this.parent = null;
       this.visible = true;
+      this.type = 'Object3D';
+      this.name = '';
     }
     
     // Position setters with method chaining
@@ -718,6 +781,12 @@ class Vector3 {
       return this;
     }
     
+    // Name setter with method chaining
+    setName(name) {
+      this.name = name;
+      return this;
+    }
+    
     // Visibility setter with method chaining
     setVisible(visible) {
       this.visible = visible;
@@ -735,6 +804,14 @@ class Vector3 {
     
     getScale() {
       return this.scale.clone();
+    }
+    
+    getName() {
+      return this.name;
+    }
+    
+    getType() {
+      return this.type;
     }
     
     isVisible() {
@@ -805,16 +882,136 @@ class Vector3 {
       
       return this;
     }
+    
+    // Apply a callback function to this object and all descendants
+    traverse(callback) {
+      callback(this);
+      
+      this.children.forEach(child => {
+        child.traverse(callback);
+      });
+      
+      return this;
+    }
+    
+    // Find a child by name (return first match)
+    getObjectByName(name) {
+      if (this.name === name) return this;
+      
+      for (let i = 0; i < this.children.length; i++) {
+        const found = this.children[i].getObjectByName(name);
+        if (found) return found;
+      }
+      
+      return null;
+    }
+    
+    // Find all children of a specific type
+    getObjectsByType(type) {
+      const result = [];
+      
+      this.traverse(object => {
+        if (object.type === type) {
+          result.push(object);
+        }
+      });
+      
+      return result;
+    }
   }
 
   // Static counter for unique IDs
   Object3D.nextId = 1;
+
+  class Mesh extends Object3D {
+    constructor(geometry, material) {
+      super();
+      this.geometry = geometry;
+      
+      // Handle materials
+      if (Array.isArray(material)) {
+        this.materials = material;
+        this.material = material[0]; // Default material
+      } else {
+        this.material = material || new Material();
+        this.materials = [this.material];
+      }
+      
+      this.type = 'Mesh';
+      this.wireframe = false;
+      
+      // Store materials with faces if not already assigned
+      this.updateFaceMaterials();
+    }
+    
+    setGeometry(geometry) {
+      this.geometry = geometry;
+      this.updateFaceMaterials();
+      return this;
+    }
+    
+    setMaterial(material) {
+      if (Array.isArray(material)) {
+        this.materials = material;
+        this.material = material[0];
+      } else {
+        this.material = material;
+        this.materials = [material];
+      }
+      this.updateFaceMaterials();
+      return this;
+    }
+    
+    // Assign materials to faces if not already assigned
+    updateFaceMaterials() {
+      if (!this.geometry || !this.geometry.faces) return this;
+      
+      for (let i = 0; i < this.geometry.faces.length; i++) {
+        const face = this.geometry.faces[i];
+        
+        // If face doesn't have a material, assign one
+        if (!face.material) {
+          // If we have multiple materials, assign based on face index
+          if (this.materials.length > 1) {
+            const materialIndex = i % this.materials.length;
+            face.material = this.materials[materialIndex];
+          } else {
+            face.material = this.material;
+          }
+        }
+      }
+      
+      return this;
+    }
+    
+    setWireframe(wireframe) {
+      this.wireframe = wireframe;
+      return this;
+    }
+    
+    // Factory methods to create basic shapes
+    static createBox(width = 1, height = 1, depth = 1, material) {
+      const geometry = Geometry.createBox(width, height, depth);
+      return new Mesh(geometry, material);
+    }
+    
+    static createSphere(radius = 1, widthSegments = 16, heightSegments = 12, material) {
+      const geometry = Geometry.createSphere(radius, widthSegments, heightSegments);
+      return new Mesh(geometry, material);
+    }
+    
+    static createPlane(width = 1, height = 1, widthSegments = 1, heightSegments = 1, material) {
+      const geometry = Geometry.createPlane(width, height, widthSegments, heightSegments);
+      return new Mesh(geometry, material);
+    }
+  }
 
   // Scene - Root container
   class Scene extends Object3D {
     constructor() {
       super();
       this.background = '#000000';
+      this.type = 'Scene';
     }
   }
 
@@ -1843,12 +2040,217 @@ class Vector3 {
   }
 
   // ---- Material ----
+  class Texture {
+    constructor(options = {}) {
+      this.image = options.image || null;
+      this.url = options.url || null;
+      this.color = options.color || '#FFFFFF';
+      this.loaded = false;
+      this.repeat = options.repeat || { x: 1, y: 1 };
+      this.offset = options.offset || { x: 0, y: 0 };
+      this.rotation = options.rotation || 0;
+      this.flipY = options.flipY !== undefined ? options.flipY : true;
+      this.onLoad = options.onLoad || null;
+      this.onError = options.onError || null;
+      this.mipmaps = []; // Storage for mipmap levels
+      
+      // Load image if URL is provided
+      if (this.url) {
+        this.load(this.url);
+      } else if (this.image) {
+        this.loaded = true;
+        // Generate mipmaps if requested
+        if (options.generateMipmaps) {
+          this.generateMipmap();
+        }
+      }
+    }
+    
+    load(url) {
+      this.url = url;
+      this.loaded = false;
+      
+      const image = new Image();
+      image.crossOrigin = "Anonymous";
+      
+      image.onload = () => {
+        this.image = image;
+        this.loaded = true;
+        
+        // Generate mipmaps when the image loads
+        this.generateMipmap();
+        
+        if (this.onLoad) this.onLoad(this);
+      };
+      
+      image.onerror = (err) => {
+        console.error(`Failed to load texture: ${url}`, err);
+        if (this.onError) this.onError(err);
+      };
+      
+      image.src = url;
+      return this;
+    }
+    
+    // Generate mipmaps for the texture
+    generateMipmap() {
+      if (!this.image || !this.loaded) return;
+      
+      this.mipmaps = [];
+      let size = Math.max(this.image.width, this.image.height);
+      
+      // Generate scaled versions
+      while (size > 8) { // Don't go smaller than 8x8
+        size = Math.floor(size / 2);
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        
+        // Maintain aspect ratio
+        const aspectRatio = this.image.width / this.image.height;
+        let drawWidth = size;
+        let drawHeight = size;
+        
+        if (aspectRatio > 1) {
+          // Image is wider than tall
+          drawHeight = size / aspectRatio;
+        } else {
+          // Image is taller than wide
+          drawWidth = size * aspectRatio;
+        }
+        
+        // Draw the image scaled down
+        ctx.drawImage(this.image, 0, 0, drawWidth, drawHeight);
+        
+        const mipImage = new Image();
+        mipImage.src = canvas.toDataURL();
+        this.mipmaps.push(mipImage);
+      }
+      
+      return this;
+    }
+    
+    setRepeat(x, y) {
+      this.repeat.x = x;
+      this.repeat.y = y;
+      return this;
+    }
+    
+    setOffset(x, y) {
+      this.offset.x = x;
+      this.offset.y = y;
+      return this;
+    }
+    
+    setRotation(angle) {
+      this.rotation = angle;
+      return this;
+    }
+    
+    setFlipY(flip) {
+      this.flipY = flip;
+      return this;
+    }
+    
+    clone() {
+      return new Texture({
+        image: this.image,
+        url: this.url,
+        color: this.color,
+        repeat: { x: this.repeat.x, y: this.repeat.y },
+        offset: { x: this.offset.x, y: this.offset.y },
+        rotation: this.rotation,
+        flipY: this.flipY
+      });
+    }
+    
+    // Create a texture from a color (useful fallback)
+    static fromColor(color) {
+      return new Texture({ color });
+    }
+    
+    // Create a texture from a URL
+    static fromURL(url, onLoad, onError) {
+      return new Texture({ url, onLoad, onError });
+    }
+    
+    // Create a texture from an image element
+    static fromImage(image, generateMipmaps = true) {
+      return new Texture({ image, generateMipmaps });
+    }
+    
+    // Create a checkerboard pattern (useful for testing)
+    static createCheckerboard(size = 64, color1 = '#FFFFFF', color2 = '#000000') {
+      const canvas = document.createElement('canvas');
+      canvas.width = size * 2;
+      canvas.height = size * 2;
+      
+      const ctx = canvas.getContext('2d');
+      
+      // Draw checkerboard
+      ctx.fillStyle = color1;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.fillStyle = color2;
+      for (let y = 0; y < 2; y++) {
+        for (let x = 0; x < 2; x++) {
+          if ((x + y) % 2 === 0) {
+            ctx.fillRect(x * size, y * size, size, size);
+          }
+        }
+      }
+      
+      // Create image from canvas
+      const image = new Image();
+      image.src = canvas.toDataURL();
+      
+      const texture = new Texture({ image });
+      texture.generateMipmap(); // Generate mipmaps for the checkerboard
+      return texture;
+    }
+  }
+
   class Material {
-    constructor(color = '#FFFFFF', opacity = 1.0) {
+    constructor(options = {}) {
+      // Handle both traditional constructor style (color, opacity)
+      // and options object style
+      if (typeof options === 'string') {
+        // Old style: first argument is color
+        this.color = options;
+        this.opacity = arguments[1] !== undefined ? arguments[1] : 1.0;
+        options = {};
+      } else {
+        // New style: options object
+        this.color = options.color || '#FFFFFF';
+        this.opacity = options.opacity !== undefined ? options.opacity : 1.0;
+      }
+      
+      // Basic properties
+      this.wireframe = options.wireframe || false;
+      this.transparent = this.opacity < 1.0;
+      this.side = options.side || 'front'; // 'front', 'back', 'double'
+      
+      // Texture maps
+      this.map = options.map || null;         // Color/diffuse map
+      this.normalMap = options.normalMap || null;   // Normal map
+      this.specularMap = options.specularMap || null; // Specular map
+      this.alphaMap = options.alphaMap || null;    // Alpha/transparency map
+      
+      // Lighting properties
+      this.shading = options.shading || 'flat';  // 'flat', 'smooth', 'phong'
+      this.shininess = options.shininess || 30;
+      this.specular = options.specular || '#111111';
+      this.emissive = options.emissive || '#000000';
+      
+      // Advanced rendering options
+      this.blending = options.blending || 'normal'; // 'normal', 'additive', 'multiply'
+      this.fog = options.fog !== undefined ? options.fog : true;
+    }
+    
+    setColor(color) {
       this.color = color;
-      this.opacity = opacity;
-      this.wireframe = false;
-      this.transparent = opacity < 1.0; // Flag to indicate if material is transparent
+      return this;
     }
     
     setOpacity(value) {
@@ -1857,21 +2259,141 @@ class Vector3 {
       return this;
     }
     
-    setColor(color) {
-      this.color = color;
-      return this;
-    }
-    
     setWireframe(wireframe) {
       this.wireframe = wireframe;
       return this;
     }
     
+    setSide(side) {
+      if (['front', 'back', 'double'].includes(side)) {
+        this.side = side;
+      }
+      return this;
+    }
+    
+    // Texture setters
+    setMap(texture) {
+      this.map = texture;
+      return this;
+    }
+    
+    setNormalMap(texture) {
+      this.normalMap = texture;
+      return this;
+    }
+    
+    setSpecularMap(texture) {
+      this.specularMap = texture;
+      return this;
+    }
+    
+    setAlphaMap(texture) {
+      this.alphaMap = texture;
+      return this;
+    }
+    
+    // Lighting property setters
+    setShading(shading) {
+      if (['flat', 'smooth', 'phong'].includes(shading)) {
+        this.shading = shading;
+      }
+      return this;
+    }
+    
+    setShininess(shininess) {
+      this.shininess = shininess;
+      return this;
+    }
+    
+    setSpecular(color) {
+      this.specular = color;
+      return this;
+    }
+    
+    setEmissive(color) {
+      this.emissive = color;
+      return this;
+    }
+    
+    // Advanced options
+    setBlending(blending) {
+      if (['normal', 'additive', 'multiply'].includes(blending)) {
+        this.blending = blending;
+      }
+      return this;
+    }
+    
+    setFog(fog) {
+      this.fog = fog;
+      return this;
+    }
+    
     // Clone the material
     clone() {
-      const newMaterial = new Material(this.color, this.opacity);
-      newMaterial.wireframe = this.wireframe;
+      const newMaterial = new Material({
+        color: this.color,
+        opacity: this.opacity,
+        wireframe: this.wireframe,
+        side: this.side,
+        shading: this.shading,
+        shininess: this.shininess,
+        specular: this.specular,
+        emissive: this.emissive,
+        blending: this.blending,
+        fog: this.fog
+      });
+      
+      // Clone textures if they exist
+      if (this.map) newMaterial.map = this.map.clone();
+      if (this.normalMap) newMaterial.normalMap = this.normalMap.clone();
+      if (this.specularMap) newMaterial.specularMap = this.specularMap.clone();
+      if (this.alphaMap) newMaterial.alphaMap = this.alphaMap.clone();
+      
       return newMaterial;
+    }
+    
+    // Create a basic material
+    static basic(color, opacity = 1.0) {
+      return new Material({
+        color,
+        opacity,
+        shading: 'flat'
+      });
+    }
+    
+    // Create a phong material
+    static phong(color, options = {}) {
+      return new Material({
+        color,
+        opacity: options.opacity || 1.0,
+        shininess: options.shininess || 30,
+        specular: options.specular || '#FFFFFF',
+        shading: 'phong'
+      });
+    }
+    
+    // Create a wireframe material
+    static wireframe(color = '#000000', opacity = 1.0) {
+      return new Material({
+        color,
+        opacity,
+        wireframe: true
+      });
+    }
+    
+    // Create a textured material
+    static textured(textureUrl, options = {}) {
+      const material = new Material({
+        color: '#FFFFFF',
+        opacity: options.opacity || 1.0,
+        shading: options.shading || 'flat'
+      });
+      
+      // Create and set the texture
+      const texture = Texture.fromURL(textureUrl);
+      material.setMap(texture);
+      
+      return material;
     }
   }
 
@@ -1884,6 +2406,10 @@ class Vector3 {
       this.normal = normal;
       this.material = material;
       this.depth = 0; // Will be calculated during rendering
+      
+      // Indices for UVs and normals (defaults to vertex indices if not specified)
+      this.uv = [a, b, c];
+      this.normalIndex = [a, b, c];
     }
     
     calculateDepth(vertices) {
@@ -1893,6 +2419,348 @@ class Vector3 {
       // Depth for painter's algorithm sorting
       this.depth = (za + zb + zc) / 3;
       return this;
+    }
+    
+    // Set UV indices explicitly
+    setUV(a, b, c) {
+      this.uv = [a, b, c];
+      return this;
+    }
+    
+    // Set normal indices explicitly
+    setNormals(a, b, c) {
+      this.normalIndex = [a, b, c];
+      return this;
+    }
+  }
+
+  class Geometry {
+    constructor() {
+      this.vertices = [];
+      this.normals = [];
+      this.uvs = [];
+      this.faces = [];
+      this.boundingBox = {
+        min: new Vector3(Infinity, Infinity, Infinity),
+        max: new Vector3(-Infinity, -Infinity, -Infinity)
+      };
+      this.boundingSphere = {
+        center: new Vector3(),
+        radius: 0
+      };
+    }
+
+    addVertex(x, y, z) {
+      if (x instanceof Vector3) {
+        this.vertices.push(x.clone());
+      } else {
+        this.vertices.push(new Vector3(x, y, z));
+      }
+      this.computeBoundingBox();
+      return this.vertices.length - 1; // Return index
+    }
+
+    addNormal(x, y, z) {
+      if (x instanceof Vector3) {
+        this.normals.push(x.clone());
+      } else {
+        this.normals.push(new Vector3(x, y, z));
+      }
+      return this.normals.length - 1; // Return index
+    }
+
+    addUV(u, v) {
+      if (u instanceof Vector2) {
+        this.uvs.push(u.clone());
+      } else {
+        this.uvs.push(new Vector2(u, v));
+      }
+      return this.uvs.length - 1; // Return index
+    }
+
+    addFace(a, b, c, material = null) {
+      // Calculate face normal if we have vertices
+      let normal = new Vector3();
+      
+      if (this.vertices.length > 0) {
+        const va = this.vertices[a];
+        const vb = this.vertices[b];
+        const vc = this.vertices[c];
+        
+        const edge1 = new Vector3().copy(vb).sub(va);
+        const edge2 = new Vector3().copy(vc).sub(va);
+        normal.copy(edge1).cross(edge2).normalize();
+      }
+      
+      const face = new Face(a, b, c, normal, material);
+      this.faces.push(face);
+      return face;
+    }
+
+    computeBoundingBox() {
+      // Reset bounding box
+      this.boundingBox.min.set(Infinity, Infinity, Infinity);
+      this.boundingBox.max.set(-Infinity, -Infinity, -Infinity);
+      
+      // Compute min/max from vertices
+      for (const vertex of this.vertices) {
+        this.boundingBox.min.x = Math.min(this.boundingBox.min.x, vertex.x);
+        this.boundingBox.min.y = Math.min(this.boundingBox.min.y, vertex.y);
+        this.boundingBox.min.z = Math.min(this.boundingBox.min.z, vertex.z);
+        
+        this.boundingBox.max.x = Math.max(this.boundingBox.max.x, vertex.x);
+        this.boundingBox.max.y = Math.max(this.boundingBox.max.y, vertex.y);
+        this.boundingBox.max.z = Math.max(this.boundingBox.max.z, vertex.z);
+      }
+      
+      return this;
+    }
+
+    computeBoundingSphere() {
+      this.computeBoundingBox();
+      
+      // Use bounding box center as sphere center
+      this.boundingSphere.center.set(
+        (this.boundingBox.min.x + this.boundingBox.max.x) / 2,
+        (this.boundingBox.min.y + this.boundingBox.max.y) / 2,
+        (this.boundingBox.min.z + this.boundingBox.max.z) / 2
+      );
+      
+      // Find the radius
+      let maxRadiusSquared = 0;
+      for (const vertex of this.vertices) {
+        const dx = vertex.x - this.boundingSphere.center.x;
+        const dy = vertex.y - this.boundingSphere.center.y;
+        const dz = vertex.z - this.boundingSphere.center.z;
+        
+        const distanceSquared = dx * dx + dy * dy + dz * dz;
+        maxRadiusSquared = Math.max(maxRadiusSquared, distanceSquared);
+      }
+      
+      this.boundingSphere.radius = Math.sqrt(maxRadiusSquared);
+      
+      return this;
+    }
+
+    computeVertexNormals() {
+      // Initialize normals array if empty
+      if (this.normals.length !== this.vertices.length) {
+        this.normals = [];
+        for (let i = 0; i < this.vertices.length; i++) {
+          this.normals.push(new Vector3());
+        }
+      } else {
+        // Reset existing normals
+        for (let i = 0; i < this.normals.length; i++) {
+          this.normals[i].set(0, 0, 0);
+        }
+      }
+      
+      // Accumulate face normals to vertices
+      for (const face of this.faces) {
+        const vA = this.vertices[face.a];
+        const vB = this.vertices[face.b];
+        const vC = this.vertices[face.c];
+        
+        const edge1 = new Vector3().copy(vB).sub(vA);
+        const edge2 = new Vector3().copy(vC).sub(vA);
+        const normal = new Vector3().copy(edge1).cross(edge2).normalize();
+        
+        // Add face normal to each vertex normal
+        this.normals[face.a].add(normal);
+        this.normals[face.b].add(normal);
+        this.normals[face.c].add(normal);
+      }
+      
+      // Normalize all vertex normals
+      for (let i = 0; i < this.normals.length; i++) {
+        this.normals[i].normalize();
+      }
+      
+      return this;
+    }
+
+    // Create common primitive shapes
+    static createBox(width = 1, height = 1, depth = 1) {
+      const geometry = new Geometry();
+      
+      // Half dimensions
+      const w = width / 2;
+      const h = height / 2;
+      const d = depth / 2;
+      
+      // Vertices (8 corners of the box)
+      geometry.addVertex(-w, -h, -d); // 0: left bottom back
+      geometry.addVertex( w, -h, -d); // 1: right bottom back
+      geometry.addVertex( w,  h, -d); // 2: right top back
+      geometry.addVertex(-w,  h, -d); // 3: left top back
+      geometry.addVertex(-w, -h,  d); // 4: left bottom front
+      geometry.addVertex( w, -h,  d); // 5: right bottom front
+      geometry.addVertex( w,  h,  d); // 6: right top front
+      geometry.addVertex(-w,  h,  d); // 7: left top front
+      
+      // UVs for box
+      geometry.addUV(0, 0);  // 0: bottom left
+      geometry.addUV(1, 0);  // 1: bottom right
+      geometry.addUV(1, 1);  // 2: top right
+      geometry.addUV(0, 1);  // 3: top left
+      
+      // Faces (2 triangles per side of the box)
+      // Front
+      const frontFace1 = geometry.addFace(4, 5, 6);
+      frontFace1.setUV(0, 1, 2); // bottom-left, bottom-right, top-right
+      
+      const frontFace2 = geometry.addFace(4, 6, 7);
+      frontFace2.setUV(0, 2, 3); // bottom-left, top-right, top-left
+      
+      // Back
+      const backFace1 = geometry.addFace(1, 0, 3);
+      backFace1.setUV(1, 0, 3); // bottom-right, bottom-left, top-left
+      
+      const backFace2 = geometry.addFace(1, 3, 2);
+      backFace2.setUV(1, 3, 2); // bottom-right, top-left, top-right
+      
+      // Top
+      const topFace1 = geometry.addFace(7, 6, 2);
+      topFace1.setUV(0, 1, 2); // bottom-left, bottom-right, top-right
+      
+      const topFace2 = geometry.addFace(7, 2, 3);
+      topFace2.setUV(0, 2, 3); // bottom-left, top-right, top-left
+      
+      // Bottom
+      const bottomFace1 = geometry.addFace(0, 1, 5);
+      bottomFace1.setUV(3, 2, 1); // top-left, top-right, bottom-right
+      
+      const bottomFace2 = geometry.addFace(0, 5, 4);
+      bottomFace2.setUV(3, 1, 0); // top-left, bottom-right, bottom-left
+      
+      // Left
+      const leftFace1 = geometry.addFace(0, 4, 7);
+      leftFace1.setUV(0, 1, 2); // bottom-left, bottom-right, top-right
+      
+      const leftFace2 = geometry.addFace(0, 7, 3);
+      leftFace2.setUV(0, 2, 3); // bottom-left, top-right, top-left
+      
+      // Right
+      const rightFace1 = geometry.addFace(5, 1, 2);
+      rightFace1.setUV(1, 0, 3); // bottom-right, bottom-left, top-left
+      
+      const rightFace2 = geometry.addFace(5, 2, 6);
+      rightFace2.setUV(1, 3, 2); // bottom-right, top-left, top-right
+      
+      // Compute normals and bounds
+      geometry.computeVertexNormals();
+      geometry.computeBoundingSphere();
+      
+      return geometry;
+    }
+    
+    static createSphere(radius = 1, widthSegments = 16, heightSegments = 12) {
+      const geometry = new Geometry();
+      
+      // Generate vertices and UVs
+      for (let y = 0; y <= heightSegments; y++) {
+        const v = y / heightSegments;
+        const phi = v * Math.PI;
+        
+        for (let x = 0; x <= widthSegments; x++) {
+          const u = x / widthSegments;
+          const theta = u * Math.PI * 2;
+          
+          // Vertex position (spherical coordinates to cartesian)
+          const sinPhiRadius = Math.sin(phi) * radius;
+          const px = -sinPhiRadius * Math.cos(theta);
+          const py = Math.cos(phi) * radius; 
+          const pz = sinPhiRadius * Math.sin(theta);
+          
+          // Add vertex
+          geometry.addVertex(px, py, pz);
+          
+          // Add normal (normalized vertex position)
+          const nx = px / radius;
+          const ny = py / radius;
+          const nz = pz / radius;
+          geometry.addNormal(nx, ny, nz);
+          
+          // Add UV
+          geometry.addUV(u, v);
+        }
+      }
+      
+      // Generate faces
+      for (let y = 0; y < heightSegments; y++) {
+        for (let x = 0; x < widthSegments; x++) {
+          const verticesPerRow = widthSegments + 1;
+          const a = y * verticesPerRow + x;
+          const b = a + 1;
+          const c = a + verticesPerRow;
+          const d = c + 1;
+          
+          // Two triangles per segment
+          const face1 = geometry.addFace(a, b, d);
+          const face2 = geometry.addFace(a, d, c);
+          
+          // UV indices match vertex indices for the sphere
+          face1.setUV(a, b, d);
+          face2.setUV(a, d, c);
+        }
+      }
+      
+      // Compute bounds
+      geometry.computeBoundingSphere();
+      
+      return geometry;
+    }
+    
+    static createPlane(width = 1, height = 1, widthSegments = 1, heightSegments = 1) {
+      const geometry = new Geometry();
+      
+      const halfWidth = width / 2;
+      const halfHeight = height / 2;
+      
+      // Generate vertices
+      for (let y = 0; y <= heightSegments; y++) {
+        const v = y / heightSegments;
+        const py = v * height - halfHeight;
+        
+        for (let x = 0; x <= widthSegments; x++) {
+          const u = x / widthSegments;
+          const px = u * width - halfWidth;
+          
+          // Add vertex (plane is in XY plane, facing +Z)
+          geometry.addVertex(px, py, 0);
+          
+          // Add normal (all facing +Z)
+          geometry.addNormal(0, 0, 1);
+          
+          // Add UV
+          geometry.addUV(u, v);
+        }
+      }
+      
+      // Generate faces
+      for (let y = 0; y < heightSegments; y++) {
+        for (let x = 0; x < widthSegments; x++) {
+          const verticesPerRow = widthSegments + 1;
+          const a = y * verticesPerRow + x;
+          const b = a + 1;
+          const c = a + verticesPerRow;
+          const d = c + 1;
+          
+          // Two triangles per segment
+          const face1 = geometry.addFace(a, b, d);
+          const face2 = geometry.addFace(a, d, c);
+          
+          // UV indices match vertex indices for the plane
+          face1.setUV(a, b, d);
+          face2.setUV(a, d, c);
+        }
+      }
+      
+      // Compute bounds
+      geometry.computeBoundingSphere();
+      
+      return geometry;
     }
   }
 
@@ -1913,6 +2781,12 @@ class Vector3 {
       this.backfaceCullingEnabled = true;
       this.intersectionThreshold = 0.05;
       this.planeDepthBias = 0.01; // Small bias for plane depth to avoid z-fighting
+      
+      // New properties for improved material system
+      this.patternCache = new Map();
+      this.textureLoadPromises = new Map();
+      this.minUV = { x: Infinity, y: Infinity, z: Infinity };
+      this.maxUV = { x: -Infinity, y: -Infinity, z: -Infinity };
       
       this.initialize();
     }
@@ -2017,6 +2891,321 @@ class Vector3 {
       return this.showIntersectionLines;
     }
     
+    // NEW: Parse color from hex to RGB object
+    parseColor(hexColor) {
+      return {
+        r: parseInt(hexColor.slice(1, 3), 16),
+        g: parseInt(hexColor.slice(3, 5), 16),
+        b: parseInt(hexColor.slice(5, 7), 16)
+      };
+    }
+    
+    // NEW: Calculate color with lighting applied
+    calculateLitColor(base, specular, emissive, intensity, shininess) {
+      // Apply diffuse lighting
+      const r = Math.min(255, Math.floor(base.r * intensity) + emissive.r);
+      const g = Math.min(255, Math.floor(base.g * intensity) + emissive.g);
+      const b = Math.min(255, Math.floor(base.b * intensity) + emissive.b);
+      
+      // Convert back to hex
+      return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    }
+    
+    // NEW: Calculate face normal
+    calculateFaceNormal(vertices) {
+      const v0 = vertices[0];
+      const v1 = vertices[1];
+      const v2 = vertices[2];
+      
+      const edge1 = new Vector3(v1.x - v0.x, v1.y - v0.y, v1.z - v0.z);
+      const edge2 = new Vector3(v2.x - v0.x, v2.y - v0.y, v2.z - v0.z);
+      
+      return new Vector3().copy(edge1).cross(edge2).normalize();
+    }
+    
+    // NEW: Get appropriate axes for UV mapping
+    getUVAxes(normal) {
+      const absX = Math.abs(normal.x);
+      const absY = Math.abs(normal.y);
+      const absZ = Math.abs(normal.z);
+      
+      if (absX >= absY && absX >= absZ) {
+        // X is dominant, use YZ plane
+        return ['y', 'z'];
+      } else if (absY >= absX && absY >= absZ) {
+        // Y is dominant, use XZ plane
+        return ['x', 'z'];
+      } else {
+        // Z is dominant, use XY plane
+        return ['x', 'y'];
+      }
+    }
+    
+    // NEW: Calculate screen area of a face
+    calculateScreenArea(points) {
+      if (points.length < 3) return 0;
+      
+      // Simple polygon area formula
+      let area = 0;
+      for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        area += (points[j].x + points[i].x) * (points[j].y - points[i].y);
+      }
+      return Math.abs(area) / 2;
+    }
+    
+    // NEW: Prepare UV bounds for better texture mapping
+    prepareUVBounds(scene) {
+      this.minUV = { x: Infinity, y: Infinity, z: Infinity };
+      this.maxUV = { x: -Infinity, y: -Infinity, z: -Infinity };
+      
+      // Traverse scene to find object bounds
+      scene.traverse(object => {
+        if (object instanceof Mesh && object.geometry && object.geometry.vertices) {
+          // Calculate bounds from vertices
+          object.geometry.vertices.forEach(v => {
+            const worldV = v.clone();
+            object.worldMatrix.transformPoint(worldV);
+            
+            this.minUV.x = Math.min(this.minUV.x, worldV.x);
+            this.minUV.y = Math.min(this.minUV.y, worldV.y);
+            this.minUV.z = Math.min(this.minUV.z, worldV.z);
+            
+            this.maxUV.x = Math.max(this.maxUV.x, worldV.x);
+            this.maxUV.y = Math.max(this.maxUV.y, worldV.y);
+            this.maxUV.z = Math.max(this.maxUV.z, worldV.z);
+          });
+        }
+      });
+    }
+    
+    // NEW: Calculate better UVs for a face
+    calculateUVs(face) {
+      // If the face already has UVs stored, use those
+      if (face.uvs) {
+        return face.uvs;
+      }
+      
+      // Otherwise use improved planar mapping
+      const vertices = face.points.map(p => p.worldPos);
+      
+      // Find a reasonable UV plane
+      const normal = this.calculateFaceNormal(vertices);
+      
+      // Get the coordinate system for UVs
+      const [uAxis, vAxis] = this.getUVAxes(normal);
+      
+      // Map UVs using the chosen axes
+      return vertices.map(v => ({
+        u: (v[uAxis] - this.minUV[uAxis]) / (this.maxUV[uAxis] - this.minUV[uAxis] || 1),
+        v: 1 - ((v[vAxis] - this.minUV[vAxis]) / (this.maxUV[vAxis] - this.minUV[vAxis] || 1))
+      }));
+    }
+    
+    // NEW: Get or create a pattern for a texture
+    getTexturePattern(texture, faceMapId) {
+      // Create a more consistent key based on texture source
+      const textureSource = texture.image.src || texture.url;
+      // Use object hash as cache key for textures without URLs
+      const cacheKey = textureSource || 
+        `texture-${texture.color}-${JSON.stringify(texture.repeat)}-${JSON.stringify(texture.offset)}`;
+      
+      if (this.patternCache.has(cacheKey)) {
+        return this.patternCache.get(cacheKey);
+      }
+      
+      // Create a unique ID for this pattern - use a hash of the src
+      const hash = textureSource.split('').reduce((a, b) => {
+        a = ((a << 5) - a) + b.charCodeAt(0);
+        return a & a;
+      }, 0);
+      const patternId = `pattern-${Math.abs(hash)}`;
+      
+      // Store in cache
+      this.patternCache.set(cacheKey, patternId);
+      console.log('Created new pattern base ID:', patternId, 'for texture:', textureSource);
+      return patternId;
+    }
+    
+    // NEW: Select appropriate mipmap level for texture
+    selectMipmapLevel(face, texture) {
+      if (!texture.mipmaps || texture.mipmaps.length === 0) return texture.image;
+      
+      // Calculate approximate screen size of face
+      const points = face.points;
+      const area = this.calculateScreenArea(points);
+      const textureArea = texture.image.width * texture.image.height;
+      
+      // Select appropriate mipmap level
+      const ratio = area / textureArea;
+      const level = Math.min(
+        texture.mipmaps.length - 1,
+        Math.max(0, Math.floor(-Math.log2(ratio)))
+      );
+      
+      return level === 0 ? texture.image : texture.mipmaps[level - 1];
+    }
+    
+    // NEW: Update a face with texture after it's loaded
+    updateTexturedFace(polygon, texture, face) {
+      // Extract face info from either the face object or the polygon attributes
+      let faceMapId, faceIndex;
+      
+      if (face && face.faceMapId) {
+        // If face object is provided, extract info from it
+        faceMapId = face.faceMapId;
+        faceIndex = face.faceGeometryIndex;
+        console.log(`Updating face ${faceMapId} with loaded texture:`, texture.url);
+      } else {
+        // Otherwise try to get from polygon attributes
+        faceMapId = polygon.getAttribute('data-face-map-id');
+        faceIndex = parseInt(polygon.getAttribute('data-face-index'), 10);
+        console.log(`Updating face by ID ${faceMapId || 'unknown'} with loaded texture:`, texture.url);
+      }
+      
+      try {
+        // Make sure we have a valid polygon and texture
+        if (!polygon || !texture || !texture.loaded) {
+          console.warn('Invalid polygon or texture for update');
+          return;
+        }
+        
+        // If no faceMapId, try to use faceIndex as fallback
+        if (!faceMapId && !isNaN(faceIndex)) {
+          faceMapId = `face-${faceIndex}`;
+        }
+        
+        // If still no faceMapId, generate a random one as last resort
+        if (!faceMapId) {
+          faceMapId = `random-${Math.floor(Math.random() * 1000)}`;
+          console.warn('Face mapping ID not provided, using random ID:', faceMapId);
+        }
+        
+        // Create a unique pattern ID based on the texture source and face map ID
+        const textureSource = texture.image.src || texture.url;
+        const hash = textureSource.split('').reduce((a, b) => {
+          a = ((a << 5) - a) + b.charCodeAt(0);
+          return a & a;
+        }, 0);
+        const patternId = `pattern-async-${Math.abs(hash)}-${faceMapId}`;
+        
+        // Check if we need to create the pattern
+        if (!document.getElementById(patternId)) {
+          console.log('Creating pattern for async texture update:', patternId);
+          
+          // Create defs element if needed
+          let defsSvg = this.svg.querySelector('defs');
+          if (!defsSvg) {
+            console.log('Creating new defs section for texture update');
+            defsSvg = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            this.svg.insertBefore(defsSvg, this.svg.firstChild);
+          }
+          
+          // Create pattern element
+          const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+          pattern.setAttribute('id', patternId);
+          pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+          pattern.setAttribute('width', texture.image.width);
+          pattern.setAttribute('height', texture.image.height);
+          
+          // Create a patternTransform based on the face ID
+          let transform = '';
+          
+          // Extract object and face IDs from the face map ID
+          let [objectId, faceGeometryIndex] = faceMapId.split('-');
+          
+          // Convert to number, or use 0 if we can't parse it
+          faceGeometryIndex = parseInt(faceGeometryIndex, 10) || 0;
+          
+          // For a box geometry, the faces are grouped in pairs (2 triangles per face)
+          const faceNumber = faceGeometryIndex % 12; // 12 triangles in a box (6 faces * 2 triangles)
+          const cubeFace = Math.floor(faceNumber / 2) % 6;
+          
+          // Apply rotation for each face to create a more 3D-like effect
+          switch (cubeFace) {
+            case 0: // Front face - no rotation
+              break;
+            case 1: // Back face - 180 degrees
+              transform += `rotate(180, ${texture.image.width/2}, ${texture.image.height/2}) `;
+              break;
+            case 2: // Top face - 90 degrees
+              transform += `rotate(90, ${texture.image.width/2}, ${texture.image.height/2}) `;
+              break;
+            case 3: // Bottom face - 270 degrees
+              transform += `rotate(270, ${texture.image.width/2}, ${texture.image.height/2}) `;
+              break;
+            case 4: // Left face - 90 degrees + flip
+              transform += `rotate(90, ${texture.image.width/2}, ${texture.image.height/2}) scale(-1, 1) `;
+              break;
+            case 5: // Right face - 270 degrees + flip
+              transform += `rotate(270, ${texture.image.width/2}, ${texture.image.height/2}) scale(-1, 1) `;
+              break;
+          }
+          
+          // Apply standard transformations
+          if (texture.repeat.x !== 1 || texture.repeat.y !== 1) {
+            const scaleX = 1 / texture.repeat.x;
+            const scaleY = 1 / texture.repeat.y;
+            transform += `scale(${scaleX} ${scaleY}) `;
+          }
+          
+          if (texture.offset.x !== 0 || texture.offset.y !== 0) {
+            transform += `translate(${texture.offset.x * texture.image.width} ${texture.offset.y * texture.image.height}) `;
+          }
+          
+          if (texture.rotation !== 0) {
+            transform += `rotate(${texture.rotation * 180 / Math.PI}, ${texture.image.width/2}, ${texture.image.height/2}) `;
+          }
+          
+          if (texture.flipY) {
+            transform += `scale(1 -1) translate(0 -${texture.image.height}) `;
+          }
+          
+          if (transform) {
+            pattern.setAttribute('patternTransform', transform);
+          }
+          
+          // Add image to pattern
+          const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+          image.setAttribute('x', '0');
+          image.setAttribute('y', '0');
+          image.setAttribute('width', texture.image.width);
+          image.setAttribute('height', texture.image.height);
+          
+          // Use both href attributes for maximum compatibility
+          try {
+            image.setAttribute('href', texture.image.src);
+          } catch (e) {
+            console.warn('Error setting href attribute:', e);
+          }
+          
+          image.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', texture.image.src);
+          
+          pattern.appendChild(image);
+          defsSvg.appendChild(pattern);
+          
+          console.log('Created pattern for texture update with image:', texture.image.src);
+        }
+        
+        // Update the polygon's fill with standard format first
+      polygon.setAttribute('fill', `url(#${patternId})`);
+        
+        // Add debug info
+        polygon.setAttribute('data-textured', 'true');
+        polygon.setAttribute('data-pattern-id', patternId);
+        polygon.setAttribute('data-face-map-id', faceMapId);
+        
+        // Set opacity to 1 to ensure visibility
+        polygon.setAttribute('fill-opacity', '1');
+        
+        // Remove the pending flag
+      polygon.removeAttribute('data-pending-texture');
+        
+        console.log(`Polygon updated with texture pattern: ${patternId} for face: ${faceMapId}`);
+      } catch (e) {
+        console.error('Error updating textured face:', e);
+      }
+    }
+    
     render(scene, camera) {
       this.camera = camera;
       
@@ -2028,6 +3217,9 @@ class Vector3 {
       // Reset renderable faces array for global sorting
       this.renderableFaces = [];
       this.intersectionMarkers = [];
+      
+      // NEW: Prepare UV bounds for better texture mapping
+      this.prepareUVBounds(scene);
       
       // Update camera matrices
       camera.updateMatrix();
@@ -2057,8 +3249,19 @@ class Vector3 {
       object.updateMatrix();
       object.updateWorldMatrix();
       
-      // Process faces for all geometry objects
-      if (object instanceof Cube || object instanceof Sphere || object instanceof Plane) {
+      // Process faces for all Mesh objects
+      if (object instanceof Mesh) {
+        // Debug: Check if this mesh has a texture
+        if (object.material && object.material.map) {
+          console.log(`Processing mesh with texture: ${object.name}`, {
+            materialHasMap: !!object.material.map,
+            textureLoaded: object.material.map ? object.material.map.loaded : false,
+            textureURL: object.material.map ? object.material.map.url : 'none',
+            materialColor: object.material.color,
+            materialOpacity: object.material.opacity
+          });
+        }
+        
         this.processFaces(object, camera);
       }
       
@@ -2068,22 +3271,28 @@ class Vector3 {
       });
     }
     
-    // Generic method to process faces for any geometry object
-    processFaces(object, camera) {
-      // Get the object type from its constructor
-      const objectType = object.constructor.name;
-      
+    // Generic method to process faces for any Mesh object
+    processFaces(mesh, camera) {
       // Project all vertices
       const projectedVertices = [];
       
-      for (let i = 0; i < object.vertices.length; i++) {
-        projectedVertices.push(this.projectVertex(object.vertices[i], object, camera, true));
+      for (let i = 0; i < mesh.geometry.vertices.length; i++) {
+        projectedVertices.push(this.projectVertex(mesh.geometry.vertices[i], mesh, camera, true));
       }
       
       // Process each face
       const facesToProcess = [];
       
-      object.faces.forEach(face => {
+      // Debug info for faces with textures
+      let texturedFacesCount = 0;
+      
+      mesh.geometry.faces.forEach((face, faceGeometryIndex) => {
+        // Debug textures: Check if material has map
+        const faceMaterial = face.material || mesh.material;
+        if (faceMaterial && faceMaterial.map) {
+          texturedFacesCount++;
+        }
+        
         // Get the projected vertices for this face
         const va = projectedVertices[face.a];
         const vb = projectedVertices[face.b];
@@ -2127,8 +3336,11 @@ class Vector3 {
         // Special handling for very thin objects (like planes)
         const isVeryThin = Math.abs(normal.dot(viewDirection)) < 0.1;
         
+        // Check if this is a plane mesh
+        const isPlane = mesh.geometry.vertices.every(v => Math.abs(v.z) < 0.001);
+        
         // Only collect faces facing the camera or almost perpendicular
-        if (dot > BACKFACE_CULLING_EPSILON || (isVeryThin && objectType === 'Plane')) {
+        if (dot > BACKFACE_CULLING_EPSILON || (isVeryThin && isPlane)) {
           // Calculate the distance from camera to each vertex and take the minimum
           // This ensures that the closest point of the face is used for depth sorting
           const d1 = this.calculatePointDistance(va.worldPos, camera.position);
@@ -2138,19 +3350,39 @@ class Vector3 {
           // Use minimum distance for more accurate depth sorting
           const depth = Math.min(d1, d2, d3);
           
+          // Store UV data if available
+          let uvs = null;
+          if (mesh.geometry.uvs && mesh.geometry.uvs.length > 0 && face.uv) {
+            uvs = [
+              mesh.geometry.uvs[face.uv[0]],
+              mesh.geometry.uvs[face.uv[1]],
+              mesh.geometry.uvs[face.uv[2]]
+            ];
+          }
+          
           // Store face data for potential intersection processing
           facesToProcess.push({
-            vertices: [object.vertices[face.a], object.vertices[face.b], object.vertices[face.c]],
+            vertices: [mesh.geometry.vertices[face.a], mesh.geometry.vertices[face.b], mesh.geometry.vertices[face.c]],
             worldVertices: [va.worldPos, vb.worldPos, vc.worldPos],
             screenPoints: [va, vb, vc],
+            uvs: uvs,
             depth: depth,
             normal: normal,
-            material: face.material,
-            objectId: object.id,
-            objectType: objectType
+            material: face.material || mesh.material,
+            objectId: mesh.id,
+            objectType: mesh.type,
+            // Store face geometry index for consistent texture mapping
+            faceGeometryIndex: faceGeometryIndex,
+            // Generate a stable mapping key for textures
+            faceMapId: `${mesh.id}-${faceGeometryIndex}`
           });
         }
       });
+      
+      // Debug texture info summary
+      if (texturedFacesCount > 0) {
+        console.log(`Found ${texturedFacesCount} faces with textures in ${mesh.name || 'unnamed mesh'}`);
+      }
       
       // Process intersections if enabled
       if (this.handleIntersections && facesToProcess.length > 0) {
@@ -2158,11 +3390,24 @@ class Vector3 {
       } else {
         // If intersection handling is disabled, just add faces directly
         facesToProcess.forEach(face => {
+          // Debug: Check if face material has texture
+          if (face.material && face.material.map) {
+            console.log('Adding face with texture to renderableFaces:', {
+              materialColor: face.material.color,
+              textureLoaded: face.material.map.loaded,
+              textureURL: face.material.map.url,
+              faceMapId: face.faceMapId
+            });
+          }
+          
           this.renderableFaces.push({
             points: face.screenPoints,
             depth: face.depth,
             material: face.material,
-            objectId: face.objectId
+            objectId: face.objectId,
+            uvs: face.uvs,
+            faceGeometryIndex: face.faceGeometryIndex,
+            faceMapId: face.faceMapId
           });
         });
       }
@@ -2442,19 +3687,287 @@ class Vector3 {
         this.renderableFaces.sort(sortFaces);
       }
       
+      // Always create defs section - we'll need it for patterns
+      let defsSvg = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        this.svg.appendChild(defsSvg);
+      console.log('Created defs section for SVG rendering');
+      
+      // Helper to create pattern for texture
+      const createPatternForTexture = (texture, face, currentFaceIndex) => {
+        // Extract the face map ID for consistent pattern mapping
+        // If face object has a mapId use it, otherwise use the current face index
+        const faceMapId = (face && face.faceMapId) 
+          ? face.faceMapId 
+          : `face-${currentFaceIndex}`;
+        
+        // Get cached or new pattern ID
+        const patternId = this.getTexturePattern(texture, faceMapId);
+        
+        // Create a unique ID based on face map ID
+        const uniquePatternId = `${patternId}-${faceMapId}`;
+        
+        // Check if pattern already exists in DOM
+        if (document.getElementById(uniquePatternId)) {
+          console.log('Using existing pattern:', uniquePatternId);
+          return uniquePatternId;
+        }
+        
+        // Make sure defsSvg exists
+        if (!defsSvg) {
+          console.warn('defsSvg element not created before pattern creation');
+          defsSvg = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+          this.svg.appendChild(defsSvg);
+        }
+        
+        console.log('Creating new pattern:', uniquePatternId, 'for texture:', texture.url, 'with faceMapId:', faceMapId);
+        
+        // Create pattern element
+        const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+        pattern.setAttribute('id', uniquePatternId);
+        pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+        pattern.setAttribute('width', texture.image.width);
+        pattern.setAttribute('height', texture.image.height);
+        
+        // Create a patternTransform based on the face's position and orientation
+        let transform = '';
+        
+        // Extract object and face IDs from the face map ID
+        const parts = faceMapId.split('-');
+        const objectId = parts[0];
+        const faceGeometryIndex = parseInt(parts[1], 10) || 0;
+        
+        const faceNumber = faceGeometryIndex % 12; // 12 triangles in a box (6 faces * 2 triangles)
+        
+        // Calculate which cube face (0-5) this triangle belongs to
+        // For a box geometry, the faces are grouped in pairs (2 triangles per face)
+        const cubeFace = Math.floor(faceNumber / 2) % 6;
+        
+        // Apply rotation for each face to create a more 3D-like effect
+        // This uses the actual cube face index (0-5) for consistent mapping
+        switch (cubeFace) {
+          case 0: // Front face - no rotation
+            break;
+          case 1: // Back face - 180 degrees
+            transform += `rotate(180, ${texture.image.width/2}, ${texture.image.height/2}) `;
+            break;
+          case 2: // Top face - 90 degrees
+            transform += `rotate(90, ${texture.image.width/2}, ${texture.image.height/2}) `;
+            break;
+          case 3: // Bottom face - 270 degrees
+            transform += `rotate(270, ${texture.image.width/2}, ${texture.image.height/2}) `;
+            break;
+          case 4: // Left face - 90 degrees + flip
+            transform += `rotate(90, ${texture.image.width/2}, ${texture.image.height/2}) scale(-1, 1) `;
+            break;
+          case 5: // Right face - 270 degrees + flip
+            transform += `rotate(270, ${texture.image.width/2}, ${texture.image.height/2}) scale(-1, 1) `;
+            break;
+        }
+        
+        // Apply standard texture transformations
+        // Apply repeat
+        if (texture.repeat.x !== 1 || texture.repeat.y !== 1) {
+          const scaleX = 1 / texture.repeat.x;
+          const scaleY = 1 / texture.repeat.y;
+          transform += `scale(${scaleX} ${scaleY}) `;
+        }
+        
+        // Apply offset
+        if (texture.offset.x !== 0 || texture.offset.y !== 0) {
+          transform += `translate(${texture.offset.x * texture.image.width} ${texture.offset.y * texture.image.height}) `;
+        }
+        
+        // Apply rotation (around center)
+        if (texture.rotation !== 0) {
+          transform += `rotate(${texture.rotation * 180 / Math.PI}, ${texture.image.width/2}, ${texture.image.height/2}) `;
+        }
+        
+        // Apply vertical flip if needed
+        if (texture.flipY) {
+          transform += `scale(1 -1) translate(0 -${texture.image.height}) `;
+        }
+        
+        if (transform) {
+          pattern.setAttribute('patternTransform', transform);
+        }
+        
+        // Use the image directly, avoiding the mipmap selection since we don't have face here
+        const imageToUse = texture.image;
+        
+        // Add image to pattern
+        const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+        image.setAttribute('x', '0');
+        image.setAttribute('y', '0');
+        image.setAttribute('width', imageToUse.width);
+        image.setAttribute('height', imageToUse.height);
+        
+        // Try direct href first (modern SVG)
+        try {
+          image.setAttribute('href', imageToUse.src);
+        } catch (e) {
+          console.warn('Error setting href attribute:', e);
+        }
+        
+        // Always set xlink:href for maximum compatibility 
+        try {
+          // Use proper namespace
+        image.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', imageToUse.src);
+        } catch (e) {
+          console.error('Error setting xlink:href attribute:', e);
+        }
+        
+        pattern.appendChild(image);
+        
+        // Log detailed info about the image being added
+        console.log('Adding image to pattern:', {
+          src: imageToUse.src,
+          width: imageToUse.width, 
+          height: imageToUse.height,
+          complete: imageToUse.complete,
+          patternId: uniquePatternId,
+          cubeFace: cubeFace
+        });
+        
+        // Add pattern to defs
+        defsSvg.appendChild(pattern);
+        
+        return uniquePatternId;
+      };
+      
+      // NEW: Render textured face with error handling
+      const renderTexturedFace = (face, polygon, faceIndex) => {
+        try {
+          if (face.material.map && face.material.map.loaded) {
+            console.log('Rendering textured face:', faceIndex, 'with mapId:', face.faceMapId || `face-${faceIndex}`);
+            
+            // If faceMapId is undefined, add one for consistency
+            if (!face.faceMapId) {
+              face.faceMapId = `face-${faceIndex}`;
+              console.log('Added missing faceMapId:', face.faceMapId);
+            }
+            
+            // Apply texture using pattern with face-specific mapping ID
+            const patternId = createPatternForTexture(face.material.map, face, faceIndex);
+            
+            // IMPORTANT: Make sure the fill attribute gets set properly
+            // Try direct DOM manipulation to ensure pattern is applied
+            const patternUrl = `url(#${patternId})`;
+            polygon.setAttribute('fill', patternUrl);
+            console.log(`Applied pattern ID ${patternId} to polygon ${faceIndex} with fill attribute: ${patternUrl}`);
+            
+            // Add data attributes for debugging
+            polygon.setAttribute('data-face-index', faceIndex);
+            polygon.setAttribute('data-pattern-id', patternId);
+            polygon.setAttribute('data-face-map-id', face.faceMapId);
+            
+            // Check SVG namespace
+            const svgNS = polygon.namespaceURI;
+            console.log('SVG namespace:', svgNS);
+            
+            // Explicitly set the stroke to none to ensure it doesn't override
+            // the texture visibility
+            polygon.setAttribute('stroke', 'none');
+            
+            // Set opacity explicitly to 1 for textured faces to ensure visibility
+            polygon.setAttribute('fill-opacity', '1');
+            
+            // Mark the polygon as textured for debugging
+            polygon.setAttribute('data-textured', 'true');
+          } else if (face.material.map && !face.material.map.loaded) {
+            console.log('Texture not yet loaded:', face.material.map.url);
+            // Fallback for loading textures
+            polygon.setAttribute('fill', face.material.color);
+            polygon.setAttribute('data-pending-texture', 'true');
+            polygon.setAttribute('data-face-index', faceIndex);
+            if (face.faceMapId) {
+              polygon.setAttribute('data-face-map-id', face.faceMapId);
+            }
+            
+            // When texture loads, update the polygon
+            if (face.material.map.onLoad === null) {
+              face.material.map.onLoad = (loadedTexture) => {
+                console.log(`Texture loaded for face ${faceIndex} (${face.faceMapId || 'unknown'}), updating:`, loadedTexture.url);
+                // Store the face information for proper pattern creation
+                polygon.setAttribute('data-face-index', faceIndex);
+                if (face.faceMapId) {
+                  polygon.setAttribute('data-face-map-id', face.faceMapId);
+                }
+                // Create a simple face object with required properties
+                const simpleFace = {
+                  faceMapId: face.faceMapId,
+                  faceGeometryIndex: face.faceGeometryIndex
+                };
+                this.updateTexturedFace(polygon, loadedTexture, simpleFace);
+              };
+            }
+          } else {
+            // No texture, just use material color
+            polygon.setAttribute('fill', face.material.color);
+          }
+        } catch (e) {
+          console.error('Error rendering textured face:', e);
+          // Fallback to material color
+          polygon.setAttribute('fill', face.material.color);
+        }
+      };
+      
       // Render sorted faces
-      this.renderableFaces.forEach(face => {
+      this.renderableFaces.forEach((face, faceIndex) => {
         const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
         
         // Set points attribute
         const pointsAttr = face.points.map(p => `${p.x},${p.y}`).join(' ');
         polygon.setAttribute('points', pointsAttr);
         
+        // NEW: Apply blending mode if specified
+        if (face.material.blending && face.material.blending !== 'normal') {
+          switch (face.material.blending) {
+            case 'additive':
+              polygon.setAttribute('mix-blend-mode', 'screen');
+              break;
+            case 'multiply':
+              polygon.setAttribute('mix-blend-mode', 'multiply');
+              break;
+          }
+        }
+        
         // Apply styling based on render mode
         switch (this.renderMode) {
           case 'normal':
-            // Regular material rendering, but highlight subdivided faces
-            if (face.isSubdivided) {
+            // NEW: Check for phong shading
+            if (face.material.shading === 'phong') {
+              // Calculate lighting based on face normal and light direction
+              const normal = face.normal || this.calculateFaceNormal(face.points.map(p => p.worldPos));
+              const lightIntensity = Math.max(0.1, normal.dot(this.lightDirection));
+              
+              // Apply material properties
+              const baseColor = this.parseColor(face.material.color);
+              const specularColor = this.parseColor(face.material.specular);
+              const emissiveColor = this.parseColor(face.material.emissive);
+              
+              // Calculate final color with lighting
+              const finalColor = this.calculateLitColor(
+                baseColor, 
+                specularColor,
+                emissiveColor,
+                lightIntensity,
+                face.material.shininess
+              );
+              
+              polygon.setAttribute('fill', finalColor);
+            }
+            // Regular material rendering or apply texture
+            else if (face.material.map) {
+              console.log('Face with texture found:', {
+                materialMap: !!face.material.map,
+                mapLoaded: face.material.map ? face.material.map.loaded : false,
+                mapURL: face.material.map ? face.material.map.url : 'none',
+                faceIndex: faceIndex,
+                faceMapId: face.faceMapId || `face-${faceIndex}`
+              });
+              renderTexturedFace(face, polygon, faceIndex);
+            }
+            else if (face.isSubdivided) {
               // Use a slightly different color to indicate subdivision
               const originalColor = face.material.color;
               let highlightColor = originalColor;
@@ -2476,7 +3989,7 @@ class Vector3 {
             } else {
               polygon.setAttribute('fill', face.material.color);
               // Only add stroke if wireframe is enabled
-              if (this.showWireframe) {
+              if (this.showWireframe || face.material.wireframe) {
                 polygon.setAttribute('stroke', '#000');
                 polygon.setAttribute('stroke-width', '1');
               } else {
@@ -2484,6 +3997,31 @@ class Vector3 {
               }
             }
             polygon.setAttribute('fill-opacity', face.material.opacity.toString());
+            
+            // NEW: Apply normal map if available
+            if (face.material.normalMap && face.material.normalMap.loaded) {
+              // Create a filter to simulate normal mapping
+              const filterId = `normalmap-${faceIndex}`;
+              const filter = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+              filter.setAttribute('id', filterId);
+              
+              // Create lighting effect with normal map
+              const lighting = document.createElementNS('http://www.w3.org/2000/svg', 'feDiffuseLighting');
+              lighting.setAttribute('in', 'SourceGraphic');
+              lighting.setAttribute('surfaceScale', '5');
+              
+              // Add light source
+              const distantLight = document.createElementNS('http://www.w3.org/2000/svg', 'feDistantLight');
+              distantLight.setAttribute('azimuth', '45');
+              distantLight.setAttribute('elevation', '45');
+              
+              lighting.appendChild(distantLight);
+              filter.appendChild(lighting);
+              defsSvg.appendChild(filter);
+              
+              // Apply the filter
+              polygon.setAttribute('filter', `url(#${filterId})`);
+            }
             break;
             
           case 'depth':
@@ -2537,6 +4075,11 @@ class Vector3 {
         
         this.sceneGroup.appendChild(polygon);
       });
+      
+      // Clean up defs if created
+      if (defsSvg && defsSvg.childNodes.length === 0) {
+        this.svg.removeChild(defsSvg);
+      }
     }
     
     // Helper to adjust a color's brightness

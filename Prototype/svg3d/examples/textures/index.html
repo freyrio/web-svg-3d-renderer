@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Texture Mapping Visualization - SVG 3D Renderer</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Preload textures with absolute path to avoid double slash issues -->
+  <link rel="preload" href="../../assets/textures/Wood_Crate_001_basecolor.jpg" as="image" crossorigin="anonymous">
+</head>
+<body>
+  <div class="app-container">
+    <!-- 3D View Container -->
+    <div class="view-panel" id="view3d-container">
+      <div class="panel-header">3D View</div>
+      <div class="panel-content" id="view3d-content"></div>
+    </div>
+    
+    <!-- UV Map Visualization -->
+    <div class="view-panel" id="uv-container">
+      <div class="panel-header">UV Mapping</div>
+      <div class="panel-content" id="uv-content">
+        <svg id="uv-svg" viewBox="0 0 1 1" width="100%" height="100%">
+          <!-- UV grid will be created dynamically -->
+          <defs>
+            <pattern id="uv-grid" width="0.1" height="0.1" patternUnits="userSpaceOnUse">
+              <path d="M 0.1 0 L 0 0 L 0 0.1" fill="none" stroke="rgba(128,128,128,0.5)" stroke-width="0.005" />
+            </pattern>
+          </defs>
+          <rect width="1" height="1" fill="url(#uv-grid)" />
+        </svg>
+        <!-- Texture will be displayed under UV coordinates -->
+        <img id="texture-display" class="texture-display" />
+      </div>
+    </div>
+    
+    <!-- Texture Controls Panel -->
+    <div class="control-panel" id="texture-controls">
+      <div class="panel-header">Texture Controls</div>
+      <div class="panel-content">
+        <div class="control-group">
+          <label for="texture-select">Texture:</label>
+          <select id="texture-select">
+            <option value="../../assets/textures/Wood_Crate_001_basecolor.jpg">Wood Crate</option>
+            <option value="../../assets/textures/checkerboard">Checkerboard</option>
+            <option value="../../assets/textures/uv-grid">UV Grid</option>
+          </select>
+        </div>
+        
+        <div class="control-group">
+          <label for="repeat-x">Repeat X:</label>
+          <input type="range" id="repeat-x" min="0.1" max="5" step="0.1" value="1">
+          <span id="repeat-x-value">1.0</span>
+        </div>
+        
+        <div class="control-group">
+          <label for="repeat-y">Repeat Y:</label>
+          <input type="range" id="repeat-y" min="0.1" max="5" step="0.1" value="1">
+          <span id="repeat-y-value">1.0</span>
+        </div>
+        
+        <div class="control-group">
+          <label for="offset-x">Offset X:</label>
+          <input type="range" id="offset-x" min="-1" max="1" step="0.05" value="0">
+          <span id="offset-x-value">0.0</span>
+        </div>
+        
+        <div class="control-group">
+          <label for="offset-y">Offset Y:</label>
+          <input type="range" id="offset-y" min="-1" max="1" step="0.05" value="0">
+          <span id="offset-y-value">0.0</span>
+        </div>
+        
+        <div class="control-group">
+          <label for="rotation">Rotation:</label>
+          <input type="range" id="rotation" min="0" max="360" step="1" value="0">
+          <span id="rotation-value">0°</span>
+        </div>
+        
+        <div class="control-group">
+          <label for="flip-y">Flip Y:</label>
+          <input type="checkbox" id="flip-y" checked>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Debug Info Panel -->
+    <div class="control-panel" id="debug-panel">
+      <div class="panel-header">Debug Info</div>
+      <div class="panel-content">
+        <div id="debug-info">
+          <pre id="face-info">Select a face to see UV info</pre>
+        </div>
+        <div id="stats">
+          <div>FPS: <span id="fps-counter">0</span></div>
+          <div>Faces: <span id="face-counter">0</span></div>
+        </div>
+        <div class="debug-buttons">
+          <button id="show-uvs">Show All UVs</button>
+          <button id="highlight-face">Highlight Face</button>
+          <button id="toggle-wireframe">Toggle Wireframe</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load the renderer library -->
+  <script src="../../svg3d.js"></script>
+  <script src="../../shapes3d.js"></script>
+  <script src="../../controls3d.js"></script>
+  
+  <!-- Load the application logic -->
+  <script src="app.js"></script>
+</body>
+</html> 
