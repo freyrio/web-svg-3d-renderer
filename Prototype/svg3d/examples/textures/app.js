@@ -102,7 +102,7 @@ function initScene() {
 function createCube() {
   console.log("Creating cube...");
   
-  // Create a simpler material initially to ensure visibility
+  // Create a material with texture
   const material = Material.basic('#ff0000', 1.0);
   
   // Create a larger cube to ensure visibility
@@ -111,6 +111,16 @@ function createCube() {
   scene.add(cube);
   
   console.log("Cube created:", cube);
+  console.log("Cube geometry:", cube.geometry);
+  console.log("Cube UVs:", cube.geometry.uvs);
+  
+  // Log all faces and their UV indices
+  if (cube.geometry && cube.geometry.faces) {
+    console.log("Cube faces UV mapping:");
+    cube.geometry.faces.forEach((face, i) => {
+      console.log(`Face ${i}: UV indices=${face.uv}`);
+    });
+  }
   
   // Update the face counter
   updateStats();
@@ -125,12 +135,21 @@ function createCube() {
   Texture.fromURL(textureSettings.url, (texture) => {
     console.log("Texture loaded:", texture);
     
+    // Set texture properties before applying
+    texture.setRepeat(textureSettings.repeatX, textureSettings.repeatY);
+    texture.setOffset(textureSettings.offsetX, textureSettings.offsetY);
+    texture.setRotation(textureSettings.rotation * Math.PI / 180);
+    texture.setFlipY(textureSettings.flipY);
+    
     // Only update after we know initialization is complete
     setTimeout(() => {
       // Apply texture to existing material
       cube.material.setMap(texture);
       updateTexture(texture);
       renderer.render(scene, camera);
+      
+      // Force update of UV visualization
+      updateUVVisualization();
       
       console.log("Texture applied to cube");
     }, 100);
@@ -234,13 +253,45 @@ function initUVVisualization() {
 // Update the texture display in the UV panel
 function updateTextureDisplay() {
   const textureDisplay = document.getElementById('texture-display');
+  
+  // Ensure texture URL is valid
+  if (!textureSettings.url) {
+    console.warn("No texture URL provided for display");
+    return;
+  }
+  
+  console.log("Updating texture display with:", textureSettings.url);
+  
+  // Set the image src
   textureDisplay.src = textureSettings.url;
-  textureDisplay.style.transform = `
-    rotate(${textureSettings.rotation}deg)
-    scale(${textureSettings.repeatX}, ${textureSettings.repeatY})
-    translate(${textureSettings.offsetX * 100}%, ${textureSettings.offsetY * 100}%)
-    ${textureSettings.flipY ? 'scaleY(-1)' : ''}
-  `;
+  
+  // Apply transformations using CSS transform property
+  // Note: we need to adjust the transform order to match what happens in WebGL
+  let transformString = '';
+  
+  // 1. Apply flip Y if needed (first in transform chain)
+  if (textureSettings.flipY) {
+    transformString += ' scaleY(-1)';
+  }
+  
+  // 2. Apply rotation
+  if (textureSettings.rotation !== 0) {
+    transformString += ` rotate(${textureSettings.rotation}deg)`;
+  }
+  
+  // 3. Apply scale (repeat)
+  transformString += ` scale(${textureSettings.repeatX}, ${textureSettings.repeatY})`;
+  
+  // 4. Apply translation (offset - multiplied by 100 to convert to percentage)
+  transformString += ` translate(${textureSettings.offsetX * 100}%, ${textureSettings.offsetY * 100}%)`;
+  
+  // Apply the constructed transform
+  textureDisplay.style.transform = transformString;
+  
+  // Ensure the texture is visible
+  textureDisplay.style.opacity = '0.5';
+  
+  console.log("Applied texture display transform:", transformString);
 }
 
 // Update the UV visualization
@@ -271,18 +322,38 @@ function updateUVVisualization() {
 
 // Draw UV coordinates for a face
 function drawFaceUVs(face, faceIndex, uvGroup) {
-  if (!face.uv || face.uv.length < 3) return;
+  if (!face.uv || face.uv.length < 3) {
+    console.warn(`Face ${faceIndex} has no UV coordinates`, face);
+    return;
+  }
+  
+  // Make sure UVs are valid
+  const validUVs = face.uv.every(i => i !== undefined && cube.geometry.uvs && i < cube.geometry.uvs.length);
+  if (!validUVs) {
+    console.warn(`Face ${faceIndex} has invalid UV indices:`, face.uv);
+    return;
+  }
   
   // Get UV coordinates
-  const uv1 = face.uv[0];
-  const uv2 = face.uv[1];
-  const uv3 = face.uv[2];
+  const uv1 = cube.geometry.uvs[face.uv[0]];
+  const uv2 = cube.geometry.uvs[face.uv[1]];
+  const uv3 = cube.geometry.uvs[face.uv[2]];
+  
+  console.log(`Drawing UVs for face ${faceIndex}:`, 
+    `A(${uv1.x.toFixed(2)},${uv1.y.toFixed(2)})`, 
+    `B(${uv2.x.toFixed(2)},${uv2.y.toFixed(2)})`, 
+    `C(${uv3.x.toFixed(2)},${uv3.y.toFixed(2)})`
+  );
+  
+  // Apply texture transformations to UV coordinates
+  // This mirrors the actual texture transformations applied in the 3D view
+  const transformedUVs = transformUVs([uv1, uv2, uv3], textureSettings);
   
   // Create polygon for the UV face
   const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
   
-  // Set polygon points from UV coordinates
-  const points = `${uv1.x},${1-uv1.y} ${uv2.x},${1-uv2.y} ${uv3.x},${1-uv3.y}`;
+  // Set polygon points from UV coordinates - note that we flip Y as SVG Y is down
+  const points = transformedUVs.map(uv => `${uv.x},${1-uv.y}`).join(' ');
   polygon.setAttribute('points', points);
   
   // Style based on whether this is the selected face
@@ -300,9 +371,63 @@ function drawFaceUVs(face, faceIndex, uvGroup) {
   uvGroup.appendChild(polygon);
   
   // Add UV point markers
-  addUVMarker(uv1.x, 1-uv1.y, 'A', uvGroup, isSelected);
-  addUVMarker(uv2.x, 1-uv2.y, 'B', uvGroup, isSelected);
-  addUVMarker(uv3.x, 1-uv3.y, 'C', uvGroup, isSelected);
+  transformedUVs.forEach((uv, i) => {
+    const labels = ['A', 'B', 'C'];
+    addUVMarker(uv.x, 1-uv.y, labels[i], uvGroup, isSelected);
+  });
+}
+
+// New helper function to transform UVs according to texture settings
+function transformUVs(uvs, settings) {
+  // Create deep copy of UVs to avoid modifying originals
+  const transformedUVs = uvs.map(uv => ({
+    x: uv.x,
+    y: uv.y
+  }));
+  
+  // Apply texture transformations in the correct order
+  
+  // 1. Apply repeat
+  transformedUVs.forEach(uv => {
+    uv.x = uv.x * settings.repeatX;
+    uv.y = uv.y * settings.repeatY;
+  });
+  
+  // 2. Apply rotation around UV center (0.5, 0.5)
+  if (settings.rotation !== 0) {
+    const radians = settings.rotation * Math.PI / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    
+    transformedUVs.forEach(uv => {
+      // Translate to origin
+      const x = uv.x - 0.5;
+      const y = uv.y - 0.5;
+      
+      // Rotate
+      const rotX = x * cos - y * sin;
+      const rotY = x * sin + y * cos;
+      
+      // Translate back
+      uv.x = rotX + 0.5;
+      uv.y = rotY + 0.5;
+    });
+  }
+  
+  // 3. Apply offset
+  transformedUVs.forEach(uv => {
+    uv.x = uv.x + settings.offsetX;
+    uv.y = uv.y + settings.offsetY;
+  });
+  
+  // 4. Apply flip Y if enabled
+  if (settings.flipY) {
+    transformedUVs.forEach(uv => {
+      uv.y = 1 - uv.y;
+    });
+  }
+  
+  return transformedUVs;
 }
 
 // Add a marker for a UV point
@@ -398,7 +523,16 @@ function initEventListeners() {
   // Texture selection
   document.getElementById('texture-select').addEventListener('change', (e) => {
     textureSettings.url = e.target.value;
-    updateTexture();
+    console.log("Texture changed to:", textureSettings.url);
+    
+    // Create a new texture with the new URL
+    Texture.fromURL(textureSettings.url, (texture) => {
+      cube.material.setMap(texture);
+      updateTexture(texture);
+      
+      // Force update of UV visualization
+      updateUVVisualization();
+    });
   });
   
   // Repeat X control
@@ -406,6 +540,8 @@ function initEventListeners() {
     textureSettings.repeatX = parseFloat(e.target.value);
     document.getElementById('repeat-x-value').textContent = textureSettings.repeatX.toFixed(1);
     updateTexture();
+    // Make sure UV visualization is updated
+    updateUVVisualization();
   });
   
   // Repeat Y control
@@ -413,6 +549,8 @@ function initEventListeners() {
     textureSettings.repeatY = parseFloat(e.target.value);
     document.getElementById('repeat-y-value').textContent = textureSettings.repeatY.toFixed(1);
     updateTexture();
+    // Make sure UV visualization is updated
+    updateUVVisualization();
   });
   
   // Offset X control
@@ -420,6 +558,8 @@ function initEventListeners() {
     textureSettings.offsetX = parseFloat(e.target.value);
     document.getElementById('offset-x-value').textContent = textureSettings.offsetX.toFixed(1);
     updateTexture();
+    // Make sure UV visualization is updated
+    updateUVVisualization();
   });
   
   // Offset Y control
@@ -427,6 +567,8 @@ function initEventListeners() {
     textureSettings.offsetY = parseFloat(e.target.value);
     document.getElementById('offset-y-value').textContent = textureSettings.offsetY.toFixed(1);
     updateTexture();
+    // Make sure UV visualization is updated
+    updateUVVisualization();
   });
   
   // Rotation control
@@ -434,12 +576,16 @@ function initEventListeners() {
     textureSettings.rotation = parseInt(e.target.value);
     document.getElementById('rotation-value').textContent = `${textureSettings.rotation}°`;
     updateTexture();
+    // Make sure UV visualization is updated
+    updateUVVisualization();
   });
   
   // Flip Y control
   document.getElementById('flip-y').addEventListener('change', (e) => {
     textureSettings.flipY = e.target.checked;
     updateTexture();
+    // Make sure UV visualization is updated
+    updateUVVisualization();
   });
   
   // Debug controls
@@ -472,17 +618,21 @@ function initEventListeners() {
 function updateTexture(texture) {
   if (!cube || !cube.material) return;
   
+  console.log("Updating texture with settings:", textureSettings);
+  
   // Update the texture image in the UV panel
   updateTextureDisplay();
   
   // Update the texture on the cube
   if (cube.material.map) {
+    console.log("Applying settings to existing texture map");
     cube.material.map.setRepeat(textureSettings.repeatX, textureSettings.repeatY);
     cube.material.map.setOffset(textureSettings.offsetX, textureSettings.offsetY);
     cube.material.map.setRotation(textureSettings.rotation * Math.PI / 180);
     cube.material.map.setFlipY(textureSettings.flipY);
   } else if (texture) {
     // Set texture properties
+    console.log("Setting properties on provided texture");
     texture.setRepeat(textureSettings.repeatX, textureSettings.repeatY);
     texture.setOffset(textureSettings.offsetX, textureSettings.offsetY);
     texture.setRotation(textureSettings.rotation * Math.PI / 180);
@@ -490,12 +640,17 @@ function updateTexture(texture) {
     cube.material.setMap(texture);
   } else {
     // Create a new texture if one doesn't exist
+    console.log("Creating new texture from URL:", textureSettings.url);
     const newTexture = Texture.fromURL(textureSettings.url, (tex) => {
+      console.log("New texture loaded, applying settings");
       tex.setRepeat(textureSettings.repeatX, textureSettings.repeatY);
       tex.setOffset(textureSettings.offsetX, textureSettings.offsetY);
       tex.setRotation(textureSettings.rotation * Math.PI / 180);
       tex.setFlipY(textureSettings.flipY);
       cube.material.setMap(tex);
+      
+      // Force update of UV visualization and render
+      updateUVVisualization();
       renderer.render(scene, camera);
     });
   }
